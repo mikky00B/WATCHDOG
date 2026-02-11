@@ -1,14 +1,17 @@
 # WATCHDOG — A Production-Grade Monitoring Platform
 
-WATCHDOG is a full-featured, production-grade monitoring and alerting platform built with a high-performance, asynchronous Python stack (FastAPI, SQLAlchemy 2.0, and Pydantic v2). It provides a sleek, responsive dashboard for at-a-glance insights into the health of your services.
+> A production-ready uptime monitoring system built with FastAPI. Monitor HTTP 
+endpoints and heartbeats, receive intelligent alerts via email, and track your 
+infrastructure's health in real-time.
 
-It supports both active monitoring of HTTP endpoints and passive heartbeat tracking for cron jobs or background services. The resilient background worker architecture includes per-domain rate limiting, exponential backoff retries, and graceful shutdown. The intelligent alerting engine features rule-based triggers, alert deduplication to prevent notification spam, and dispatches alerts through multiple channels (Email, Slack, and Webhooks are supported).
+**Key Features:** Rate-limited health checks • Smart alert deduplication • 
+Customizable rules • Beautiful email notifications • RESTful API. 
 
 ---
 
 ## 🚀 Getting Started (Manual Setup)
 
-This guide provides instructions for setting up the project manually without Docker.
+This guide provides instructions for setting up the project.
 
 ### 1. Prerequisites
 
@@ -19,7 +22,7 @@ This guide provides instructions for setting up the project manually without Doc
 ### 2. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone <https://github.com/mikky00B/WATCHDOG>
 cd monitoring-platform
 ```
 
@@ -255,7 +258,3 @@ alembic upgrade head
 
 ---
 
-## Architecture Decisions
-
-See `DECISION_LOG.md` for 20+ documented decisions with rationale.
-See `CODE_AUDIT_LOG.md` for all code quality audits and bugs fixed.
