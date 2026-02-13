@@ -4,8 +4,9 @@
 endpoints and heartbeats, receive intelligent alerts via email, and track your 
 infrastructure's health in real-time.
 
-**Key Features:** Rate-limited health checks • Smart alert deduplication • 
-Customizable rules • Beautiful email notifications • RESTful API. 
+**Key Features:** Rate-limited health checks • Smart alert deduplication •
+Customizable rules • Multi-channel alerts (Email, Slack, Webhook, Telegram) •
+RESTful API.
 
 ---
 
@@ -131,6 +132,11 @@ SMTP_FROM_EMAIL=alerts@example.com
 
 # Slack alerts
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# Telegram alerts + bot control
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
+TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
 ```
 
 ---
@@ -140,7 +146,8 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 - **HTTP endpoint monitoring** — configurable intervals and timeouts
 - **Heartbeat tracking** — detect missed service pings
 - **Alert rule engine** — consecutive failures, latency thresholds
-- **Multi-channel alerts** — Webhook, Email, Slack
+- **Multi-channel alerts** — Webhook, Email, Slack, Telegram
+- **Telegram bot control panel** — secure command handling over webhook mode
 - **Background scheduler** — async health checks
 - **Dashboard UI** — live at `/dashboard`
 - **REST API** — full CRUD with OpenAPI docs at `/docs`
@@ -197,6 +204,50 @@ pytest --cov=src/monitoring --cov-report=html
 # Unit tests only
 pytest -m unit
 ```
+
+---
+
+## Telegram Integration
+
+Telegram integration uses webhook mode only (no polling).
+
+### 1. Configure `.env`
+
+```env
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
+TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
+```
+
+### 2. Start the API Server
+
+Telegram commands require the API server to be running and reachable at your webhook URL.
+
+```bash
+uvicorn monitoring.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 3. Register Webhook Manually
+
+```bash
+python scripts/register_telegram_webhook.py
+```
+
+Webhook route:
+
+```text
+/api/v1/integrations/telegram/webhook
+```
+
+### 4. Supported Bot Commands
+
+- `/status`
+- `/monitors`
+- `/alerts`
+- `/ack <alert_id>`
+- `/resolve <alert_id>`
+- `/enable <monitor_id>`
+- `/disable <monitor_id>`
 
 ---
 
@@ -257,4 +308,5 @@ alembic upgrade head
 ```
 
 ---
+
 
