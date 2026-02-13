@@ -136,7 +136,7 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 # Telegram alerts + bot control
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
-TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
+TELEGRAM_ALLOWED_CHAT_IDS=[]
 ```
 
 ---
