@@ -57,8 +57,25 @@ class Settings(BaseSettings):
     # Alerting - Slack
     slack_webhook_url: str | None = Field(default=None)
 
+    # Alerting - Telegram
+    telegram_bot_token: str | None = Field(default=None)
+    telegram_webhook_secret: str | None = Field(default=None)
+    telegram_allowed_chat_ids: list[str] = []
+
     # Logging
     log_level: str = Field(default="INFO")
+
+    @field_validator("telegram_allowed_chat_ids", mode="before")
+    @classmethod
+    def parse_telegram_chat_ids(cls, v):
+        """Parse comma-separated chat ID list from env."""
+        if isinstance(v, str):
+            return [chat_id.strip() for chat_id in v.split(",") if chat_id.strip()]
+        if isinstance(v, int):
+            return [str(v)]
+        if isinstance(v, list):
+            return [str(chat_id).strip() for chat_id in v if str(chat_id).strip()]
+        return v
 
 
 @lru_cache

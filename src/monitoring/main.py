@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
 from monitoring.api.v1 import alerts, checks, heartbeats, monitors
+from monitoring.api.v1.integrations import telegram as telegram_integration
 from monitoring.config import get_settings
 from monitoring.database import AsyncSessionLocal, close_db, init_db
 from monitoring.models.alert import Alert
@@ -81,6 +82,11 @@ app.include_router(
     prefix="/api/v1/heartbeats",
     tags=["heartbeats"],
 )
+app.include_router(
+    telegram_integration.router,
+    prefix="/api/v1/integrations/telegram",
+    tags=["integrations"],
+)
 
 
 @app.get("/health")
@@ -93,21 +99,31 @@ async def health_check() -> dict[str, str]:
 async def get_stats() -> dict[str, int]:
     """Get aggregate stats for the dashboard."""
     async with AsyncSessionLocal() as db:
-        total_monitors = (await db.execute(select(func.count(Monitor.id)))).scalar() or 0
+        total_monitors = (
+            await db.execute(select(func.count(Monitor.id)))
+        ).scalar() or 0
         enabled_monitors = (
             await db.execute(
-                select(func.count(Monitor.id)).where(Monitor.enabled == True)  # noqa: E712
+                select(func.count(Monitor.id)).where(
+                    Monitor.enabled == True
+                )  # noqa: E712
             )
         ).scalar() or 0
-        total_checks = (await db.execute(select(func.count(CheckResult.id)))).scalar() or 0
+        total_checks = (
+            await db.execute(select(func.count(CheckResult.id)))
+        ).scalar() or 0
         failed_checks = (
             await db.execute(
-                select(func.count(CheckResult.id)).where(CheckResult.success == False)  # noqa: E712
+                select(func.count(CheckResult.id)).where(
+                    CheckResult.success == False
+                )  # noqa: E712
             )
         ).scalar() or 0
         active_alerts = (
             await db.execute(
-                select(func.count(Alert.id)).where(Alert.resolved == False)  # noqa: E712
+                select(func.count(Alert.id)).where(
+                    Alert.resolved == False
+                )  # noqa: E712
             )
         ).scalar() or 0
         total_heartbeats = (
@@ -135,9 +151,10 @@ async def root() -> dict[str, str]:
     }
 
 
-# Mount static files for dashboard (must be last)
 import os  # noqa: E402
 
 dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard")
 if os.path.exists(dashboard_path):
-    app.mount("/dashboard", StaticFiles(directory=dashboard_path, html=True), name="dashboard")
+    app.mount(
+        "/dashboard", StaticFiles(directory=dashboard_path, html=True), name="dashboard"
+    )
