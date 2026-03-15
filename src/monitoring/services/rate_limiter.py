@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict
 from urllib.parse import urlparse
 
 import structlog
@@ -17,7 +16,7 @@ class RateLimiter:
 
     def __init__(self, requests_per_minute: int = 10):
         self.requests_per_minute = requests_per_minute
-        self.site_requests: Dict[str, list[datetime]] = defaultdict(list)
+        self.site_requests: dict[str, list[datetime]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
     def _get_domain(self, url: str) -> str:
@@ -25,7 +24,7 @@ class RateLimiter:
         parsed = urlparse(url)
         return parsed.netloc or url
 
-    async def acquire(self, url: str):
+    async def acquire(self, url: str) -> None:
         """Wait if necessary to respect rate limits for a site."""
         domain = self._get_domain(url)
 

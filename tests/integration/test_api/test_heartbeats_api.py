@@ -37,7 +37,9 @@ async def test_list_heartbeats(test_db: AsyncSession) -> None:
         resp = await c.get("/api/v1/heartbeats/")
     app.dependency_overrides.clear()
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    payload = resp.json()
+    assert payload["total"] == 1
+    assert len(payload["heartbeats"]) == 1
 
 
 @pytest.mark.integration

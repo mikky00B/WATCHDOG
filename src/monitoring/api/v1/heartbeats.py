@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from monitoring.dependencies import DbSession
 from monitoring.schemas.heartbeat import (
     HeartbeatCreate,
+    HeartbeatList,
     HeartbeatResponse,
     HeartbeatUpdate,
 )
 from monitoring.services.heartbeat_service import HeartbeatService
-from monitoring.database import get_db
 
 router = APIRouter()
 
@@ -49,18 +49,21 @@ async def get_heartbeat(
     return HeartbeatResponse.model_validate(heartbeat)
 
 
-@router.get("/", response_model=list[HeartbeatResponse])
+@router.get("/", response_model=HeartbeatList)
 async def list_heartbeats(
     db: DbSession,
-    skip: int = 0,
-    limit: int = 100,
-) -> list[HeartbeatResponse]:
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> HeartbeatList:
     """List all heartbeats."""
     service = HeartbeatService(db)
     heartbeats, total = await service.list_heartbeats(
         skip=skip, limit=limit
     )  # ← Unpack the tuple
-    return [HeartbeatResponse.model_validate(h) for h in heartbeats]
+    return HeartbeatList(
+        heartbeats=[HeartbeatResponse.model_validate(h) for h in heartbeats],
+        total=total,
+    )
 
 
 @router.patch("/{heartbeat_id}", response_model=HeartbeatResponse)
@@ -86,7 +89,7 @@ async def update_heartbeat(
 async def delete_heartbeat(
     heartbeat_id: uuid.UUID,
     db: DbSession,
-):
+) -> Response:
     """Delete a heartbeat."""
     service = HeartbeatService(db)
     deleted = await service.delete_heartbeat(heartbeat_id)
@@ -96,6 +99,8 @@ async def delete_heartbeat(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Heartbeat {heartbeat_id} not found",
         )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{heartbeat_id}/ping", response_model=HeartbeatResponse)

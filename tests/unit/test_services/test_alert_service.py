@@ -58,8 +58,9 @@ async def test_get_alert_not_found(test_db: AsyncSession) -> None:
 @pytest.mark.unit
 async def test_list_alerts(test_db: AsyncSession, sample_alert: Alert) -> None:
     service = AlertService(test_db)
-    alerts = await service.list_alerts()
+    alerts, total = await service.list_alerts()
     assert len(alerts) >= 1
+    assert total >= 1
     assert any(a.id == sample_alert.id for a in alerts)
 
 
@@ -67,11 +68,11 @@ async def test_list_alerts(test_db: AsyncSession, sample_alert: Alert) -> None:
 async def test_list_alerts_unresolved_only(test_db: AsyncSession, sample_monitor) -> None:
     service = AlertService(test_db)
     unresolved = await service.create_alert(_alert_create(sample_monitor.id))
-    resolved = await service.create_alert(_alert_create(sample_monitor.id))
+    resolved = await service.create_alert(_alert_create(sample_monitor.id, "error"))
     await service.resolve_alert(resolved.id)
     await test_db.commit()
 
-    open_alerts = await service.list_alerts(unresolved_only=True)
+    open_alerts, _ = await service.list_alerts(unresolved_only=True)
     ids = [a.id for a in open_alerts]
     assert unresolved.id in ids
     assert resolved.id not in ids
