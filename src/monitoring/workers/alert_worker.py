@@ -242,7 +242,7 @@ class AlertWorker:
                 failed_channels=failed_channels,
             )
 
-    async def get_stats(self) -> dict:
+    async def get_stats(self) -> dict[str, object]:
         """Get worker statistics."""
         return {
             "running": self.running,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from monitoring.dependencies import DbSession
@@ -15,10 +15,10 @@ router = APIRouter()
 
 @router.get("/{monitor_id}/results", response_model=CheckResultList)
 async def get_monitor_check_results(
+    db: DbSession,
     monitor_id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 100,
-    db: DbSession = ...,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
 ) -> CheckResultList:
     """Get check results for a monitor."""
     # First verify monitor exists
@@ -56,10 +56,10 @@ async def get_monitor_check_results(
 
 @router.get("/recent", response_model=CheckResultList)
 async def get_recent_check_results(
-    skip: int = 0,
-    limit: int = 100,
+    db: DbSession,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
     failed_only: bool = False,
-    db: DbSession = ...,
 ) -> CheckResultList:
     """Get recent check results across all monitors."""
     # Base query

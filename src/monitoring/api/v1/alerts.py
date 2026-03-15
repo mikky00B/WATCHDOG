@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from monitoring.dependencies import DbSession
 from monitoring.schemas.alert import AlertList, AlertResponse, AlertUpdate
@@ -11,10 +11,10 @@ router = APIRouter()
 
 @router.get("/", response_model=AlertList)
 async def list_alerts(
-    skip: int = 0,
-    limit: int = 100,
+    db: DbSession,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
     unresolved_only: bool = False,
-    db: DbSession = ...,
 ) -> AlertList:
     """List alerts."""
     service = AlertService(db)

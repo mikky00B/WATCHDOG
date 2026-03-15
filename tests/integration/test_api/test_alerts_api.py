@@ -41,7 +41,7 @@ async def test_list_alerts_empty(test_db: AsyncSession) -> None:
         resp = await c.get("/api/v1/alerts/")
     app.dependency_overrides.clear()
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json() == {"alerts": [], "total": 0}
 
 
 @pytest.mark.integration
@@ -51,7 +51,7 @@ async def test_list_alerts_returns_items(test_db: AsyncSession) -> None:
         resp = await c.get("/api/v1/alerts/")
     app.dependency_overrides.clear()
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["alerts"]) == 1
 
 
 @pytest.mark.integration
@@ -103,4 +103,4 @@ async def test_list_unresolved_only(test_db: AsyncSession) -> None:
         resp = await c.get("/api/v1/alerts/?unresolved_only=true")
     app.dependency_overrides.clear()
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json() == {"alerts": [], "total": 0}

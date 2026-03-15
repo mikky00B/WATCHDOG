@@ -802,6 +802,95 @@
       padding: 14px 20px;
       border-top: 1px solid var(--border);
     }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .detail-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .detail-value {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+    .detail-message {
+      margin-top: 8px;
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .detail-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      background: var(--bg-panel-alt);
+    }
+    .detail-pill.up,
+    .detail-pill.alive,
+    .detail-pill.healthy {
+      color: var(--green-text);
+      border-color: rgba(0,255,133,0.35);
+      background: var(--green-dim);
+    }
+    .detail-pill.down,
+    .detail-pill.dead,
+    .detail-pill.missed {
+      color: var(--red);
+      border-color: rgba(255,64,96,0.35);
+      background: var(--red-dim);
+    }
+    .detail-pill.warn,
+    .detail-pill.late {
+      color: var(--yellow);
+      border-color: rgba(255,214,0,0.35);
+      background: var(--yellow-dim);
+    }
+    .detail-list {
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-panel-alt);
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .detail-list-row {
+      display: grid;
+      grid-template-columns: 70px 80px 1fr;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      align-items: center;
+    }
     .btn-ghost {
       background: none;
       border: 1px solid var(--border);
@@ -920,7 +1009,7 @@
   <!-- ── SIDEBAR ──────────────────────────────────────── -->
   <nav class="sidebar">
     <span class="nav-section-label">Overview</span>
-    <div class="nav-item active" onclick="setView('dashboard')">
+    <div class="nav-item active" onclick="setView('dashboard', event)">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
         <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
@@ -929,13 +1018,13 @@
     </div>
 
     <span class="nav-section-label">Monitoring</span>
-    <div class="nav-item" onclick="setView('monitors')">
+    <div class="nav-item" onclick="setView('monitors', event)">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
       Monitors
     </div>
-    <div class="nav-item" onclick="setView('heartbeats')">
+    <div class="nav-item" onclick="setView('heartbeats', event)">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
@@ -943,7 +1032,7 @@
     </div>
 
     <span class="nav-section-label">Incidents</span>
-    <div class="nav-item" id="nav-alerts" onclick="setView('alerts')">
+    <div class="nav-item" id="nav-alerts" onclick="setView('alerts', event)">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
@@ -1059,7 +1148,7 @@
       <div style="display:flex;flex-direction:column;gap:16px;">
 
         <!-- Alerts Panel -->
-        <div class="panel">
+        <div class="panel" id="alerts-panel">
           <div class="panel-header">
             <div class="panel-title">
               <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -1075,7 +1164,7 @@
         </div>
 
         <!-- Heartbeats Panel -->
-        <div class="panel">
+        <div class="panel" id="heartbeats-panel">
           <div class="panel-header">
             <div class="panel-title">
               <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -1094,7 +1183,7 @@
     </div>
 
     <!-- Activity Log -->
-    <div class="panel log-panel">
+    <div class="panel log-panel" id="log-panel">
       <div class="panel-header">
         <div class="panel-title">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -1145,14 +1234,165 @@
         <label class="form-label">Monitor Type</label>
         <select class="form-select" id="f-type">
           <option value="http">HTTP</option>
-          <option value="heartbeat">Heartbeat</option>
-          <option value="dependency">Dependency</option>
         </select>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-ghost" onclick="closeAddModal()">Cancel</button>
       <button class="btn-primary" onclick="createMonitor()">Create Monitor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ALERT DETAIL MODAL ─────────────────────────────── -->
+<div class="modal-overlay" id="alert-detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Alert Details</span>
+      <button class="modal-close" onclick="closeAlertDetailModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Alert ID</div>
+          <div class="detail-value" id="detail-alert-id">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Severity</div>
+          <div class="detail-value" id="detail-alert-severity">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Monitor</div>
+          <div class="detail-value" id="detail-alert-monitor">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Triggered</div>
+          <div class="detail-value" id="detail-alert-triggered">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Acknowledged</div>
+          <div class="detail-value" id="detail-alert-ack">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Resolved</div>
+          <div class="detail-value" id="detail-alert-resolved">—</div>
+        </div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Title</div>
+        <div class="detail-value" id="detail-alert-title">—</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Message</div>
+        <div class="detail-message" id="detail-alert-message">—</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeAlertDetailModal()">Close</button>
+      <button class="btn-small ack" id="detail-ack-btn" onclick="ackActiveAlert()">Ack</button>
+      <button class="btn-small" id="detail-resolve-btn" onclick="resolveActiveAlert()">Resolve</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MONITOR DETAIL MODAL ───────────────────────────── -->
+<div class="modal-overlay" id="monitor-detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Monitor Details</span>
+      <button class="modal-close" onclick="closeMonitorDetailModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Name</div>
+          <div class="detail-value" id="detail-monitor-name">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Status</div>
+          <div class="detail-value" id="detail-monitor-status">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Type</div>
+          <div class="detail-value" id="detail-monitor-type">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Enabled</div>
+          <div class="detail-value" id="detail-monitor-enabled">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Interval</div>
+          <div class="detail-value" id="detail-monitor-interval">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Timeout</div>
+          <div class="detail-value" id="detail-monitor-timeout">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last Check</div>
+          <div class="detail-value" id="detail-monitor-last-check">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last Latency</div>
+          <div class="detail-value" id="detail-monitor-latency">—</div>
+        </div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">URL</div>
+        <div class="detail-value" id="detail-monitor-url">—</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Recent Checks</div>
+        <div class="detail-list" id="detail-monitor-checks"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeMonitorDetailModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEARTBEAT DETAIL MODAL ─────────────────────────── -->
+<div class="modal-overlay" id="heartbeat-detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Heartbeat Details</span>
+      <button class="modal-close" onclick="closeHeartbeatDetailModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Name</div>
+          <div class="detail-value" id="detail-hb-name">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">State</div>
+          <div class="detail-value" id="detail-hb-state">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Expected Interval</div>
+          <div class="detail-value" id="detail-hb-interval">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Last Seen</div>
+          <div class="detail-value" id="detail-hb-last">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Elapsed</div>
+          <div class="detail-value" id="detail-hb-elapsed">—</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Public ID</div>
+          <div class="detail-value" id="detail-hb-public-id">—</div>
+        </div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Description</div>
+        <div class="detail-message" id="detail-hb-description">—</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeHeartbeatDetailModal()">Close</button>
     </div>
   </div>
 </div>
@@ -1172,6 +1412,9 @@ let state = {
   stats:    null,
   apiOk:    false,
 };
+let activeAlertId = null;
+let activeMonitorId = null;
+let activeHeartbeatId = null;
 
 // ── Demo data (shown when API unavailable) ─────────────
 const DEMO = {
@@ -1234,6 +1477,27 @@ function getLastLatency(monitor, allChecks) {
   const monChecks = allChecks.filter(c => c.monitor_id === monitor.id);
   if (!monChecks.length || !monChecks[0].latency_ms) return null;
   return monChecks[0].latency_ms;
+}
+
+function getRecentChecksForMonitor(monitorId, limit = 5) {
+  return state.checks
+    .filter(c => c.monitor_id === monitorId)
+    .sort((a, b) => new Date(b.checked_at).getTime() - new Date(a.checked_at).getTime())
+    .slice(0, limit);
+}
+
+function getHeartbeatHealth(hb) {
+  if (!hb.last_heartbeat_at) {
+    return { level: 'missed', label: 'Never Seen', elapsedSeconds: null };
+  }
+  const elapsedSeconds = (Date.now() - new Date(hb.last_heartbeat_at).getTime()) / 1000;
+  if (elapsedSeconds > hb.expected_interval_seconds * 2) {
+    return { level: 'missed', label: 'Missed', elapsedSeconds };
+  }
+  if (elapsedSeconds > hb.expected_interval_seconds) {
+    return { level: 'late', label: 'Late', elapsedSeconds };
+  }
+  return { level: 'healthy', label: 'Healthy', elapsedSeconds };
 }
 
 // ── Fetch helpers ──────────────────────────────────────
@@ -1372,7 +1636,7 @@ function renderMonitorRow(m) {
 
   const statusLabel = {up:'UP', down:'DOWN', unknown:'—'}[status] || '—';
 
-  return `<tr>
+  return `<tr onclick="openMonitorDetailModal(${m.id})">
     <td>
       <span class="status-pill ${status}">
         <span class="status-dot"></span>${statusLabel}
@@ -1410,7 +1674,7 @@ function renderAlerts() {
   }
 
   el('alerts-body').innerHTML = alerts.map(a => `
-    <div class="alert-item">
+    <div class="alert-item" onclick="openAlertDetailModal(${a.id})">
       <div class="alert-severity-bar ${a.severity}"></div>
       <div class="alert-content">
         <div class="alert-title">${esc(a.title)}</div>
@@ -1421,8 +1685,8 @@ function renderAlerts() {
         </div>
       </div>
       <div class="alert-actions">
-        ${!a.acknowledged ? `<button class="btn-small ack" onclick="ackAlert(${a.id})">Ack</button>` : ''}
-        <button class="btn-small" onclick="resolveAlert(${a.id})">Resolve</button>
+        ${!a.acknowledged ? `<button class="btn-small ack" onclick="event.stopPropagation(); ackAlert(${a.id});">Ack</button>` : ''}
+        <button class="btn-small" onclick="event.stopPropagation(); resolveAlert(${a.id});">Resolve</button>
       </div>
     </div>
   `).join('');
@@ -1446,7 +1710,7 @@ function renderHeartbeats() {
     const pClass = !last ? 'dead' : veryOver ? 'dead' : over ? 'warn' : 'alive';
     const lastStr = last ? relTime(h.last_heartbeat_at) : 'Never';
 
-    return `<div class="heartbeat-item">
+    return `<div class="heartbeat-item" onclick="openHeartbeatDetailModal('${esc(h.public_id)}')">
       <div class="hb-pulse ${pClass}"></div>
       <div class="hb-info">
         <div class="hb-name">${esc(h.name)}</div>
@@ -1481,6 +1745,132 @@ function renderLog() {
 }
 
 // ── Actions ────────────────────────────────────────────
+function findMonitorById(id) {
+  return state.monitors.find(m => m.id === id) || null;
+}
+
+function findHeartbeatByPublicId(publicId) {
+  return state.heartbeats.find(h => h.public_id === publicId) || null;
+}
+
+function openMonitorDetailModal(monitorId) {
+  const monitor = findMonitorById(monitorId);
+  if (!monitor) {
+    toast('Monitor not found', 'error');
+    return;
+  }
+
+  const status = getMonitorStatus(monitor, state.checks);
+  const statusLabel = { up: 'UP', down: 'DOWN', unknown: 'UNKNOWN' }[status] || 'UNKNOWN';
+  const latency = getLastLatency(monitor, state.checks);
+  const recentChecks = getRecentChecksForMonitor(monitor.id, 6);
+
+  activeMonitorId = monitor.id;
+  el('detail-monitor-name').textContent = monitor.name || '—';
+  el('detail-monitor-status').innerHTML = `<span class="detail-pill ${status}">${statusLabel}</span>`;
+  el('detail-monitor-type').textContent = (monitor.monitor_type || 'http').toUpperCase();
+  el('detail-monitor-enabled').textContent = monitor.enabled ? 'Yes' : 'No';
+  el('detail-monitor-interval').textContent = fmtSeconds(monitor.interval_seconds || 0);
+  el('detail-monitor-timeout').textContent = `${monitor.timeout_seconds ?? '—'}s`;
+  el('detail-monitor-last-check').textContent = monitor.last_checked_at ? fmtTime(monitor.last_checked_at) : 'Never';
+  el('detail-monitor-latency').textContent = latency ? `${latency.toFixed(0)}ms` : '—';
+  el('detail-monitor-url').textContent = monitor.url || '—';
+
+  const checksEl = el('detail-monitor-checks');
+  if (!recentChecks.length) {
+    checksEl.innerHTML = `<div class="detail-value">No check results yet</div>`;
+  } else {
+    checksEl.innerHTML = recentChecks.map(c => `
+      <div class="detail-list-row">
+        <span class="${c.success ? 'log-status-ok' : 'log-status-fail'}">${c.success ? 'OK' : 'FAIL'}</span>
+        <span>${c.status_code ?? '—'}</span>
+        <span>${fmtTime(c.checked_at)}${c.latency_ms ? ` · ${c.latency_ms.toFixed(0)}ms` : ''}${c.error_message ? ` · ${esc(c.error_message)}` : ''}</span>
+      </div>
+    `).join('');
+  }
+
+  el('monitor-detail-modal').classList.add('open');
+}
+
+function closeMonitorDetailModal() {
+  activeMonitorId = null;
+  el('monitor-detail-modal').classList.remove('open');
+}
+
+function openHeartbeatDetailModal(publicId) {
+  const hb = findHeartbeatByPublicId(publicId);
+  if (!hb) {
+    toast('Heartbeat not found', 'error');
+    return;
+  }
+
+  const health = getHeartbeatHealth(hb);
+  activeHeartbeatId = hb.public_id;
+
+  el('detail-hb-name').textContent = hb.name || '—';
+  el('detail-hb-state').innerHTML = `<span class="detail-pill ${health.level}">${health.label}</span>`;
+  el('detail-hb-interval').textContent = fmtSeconds(hb.expected_interval_seconds || 0);
+  el('detail-hb-last').textContent = hb.last_heartbeat_at ? fmtTime(hb.last_heartbeat_at) : 'Never';
+  el('detail-hb-elapsed').textContent = health.elapsedSeconds == null ? '—' : fmtSeconds(Math.max(0, Math.floor(health.elapsedSeconds)));
+  el('detail-hb-public-id').textContent = hb.public_id || '—';
+  el('detail-hb-description').textContent = hb.description || 'No description';
+
+  el('heartbeat-detail-modal').classList.add('open');
+}
+
+function closeHeartbeatDetailModal() {
+  activeHeartbeatId = null;
+  el('heartbeat-detail-modal').classList.remove('open');
+}
+
+function findAlertById(id) {
+  return state.alerts.find(a => a.id === id) || null;
+}
+
+function monitorNameById(id) {
+  const monitor = state.monitors.find(m => m.id === id);
+  return monitor ? monitor.name : `Monitor #${id}`;
+}
+
+function openAlertDetailModal(alertId) {
+  const alert = findAlertById(alertId);
+  if (!alert) {
+    toast('Alert not found', 'error');
+    return;
+  }
+
+  activeAlertId = alert.id;
+  el('detail-alert-id').textContent = String(alert.id);
+  el('detail-alert-severity').textContent = String(alert.severity).toUpperCase();
+  el('detail-alert-monitor').textContent = monitorNameById(alert.monitor_id);
+  el('detail-alert-triggered').textContent = fmtTime(alert.triggered_at);
+  el('detail-alert-ack').textContent = alert.acknowledged ? 'Yes' : 'No';
+  el('detail-alert-resolved').textContent = alert.resolved ? 'Yes' : 'No';
+  el('detail-alert-title').textContent = alert.title || '—';
+  el('detail-alert-message').textContent = alert.message || '—';
+
+  el('detail-ack-btn').style.display = alert.acknowledged ? 'none' : '';
+  el('detail-resolve-btn').style.display = alert.resolved ? 'none' : '';
+  el('alert-detail-modal').classList.add('open');
+}
+
+function closeAlertDetailModal() {
+  activeAlertId = null;
+  el('alert-detail-modal').classList.remove('open');
+}
+
+async function ackActiveAlert() {
+  if (activeAlertId == null) return;
+  await ackAlert(activeAlertId);
+  if (findAlertById(activeAlertId)) openAlertDetailModal(activeAlertId);
+}
+
+async function resolveActiveAlert() {
+  if (activeAlertId == null) return;
+  await resolveAlert(activeAlertId);
+  closeAlertDetailModal();
+}
+
 async function ackAlert(id) {
   try {
     if (state.apiOk) { await apiPost(`/api/v1/alerts/${id}/acknowledge`, {}); }
@@ -1511,10 +1901,18 @@ async function createMonitor() {
 
   if (!name || !url) { toast('Name and URL are required', 'error'); return; }
   if (!url.startsWith('http')) { toast('URL must start with http:// or https://', 'error'); return; }
+  if (!Number.isFinite(interval) || interval < 10 || interval > 3600) {
+    toast('Interval must be between 10 and 3600 seconds', 'error');
+    return;
+  }
+  if (!Number.isFinite(timeout) || timeout < 1 || timeout > 60) {
+    toast('Timeout must be between 1 and 60 seconds', 'error');
+    return;
+  }
 
   try {
     if (state.apiOk) {
-      const m = await apiPost('/api/v1/monitors', { name, url, interval_seconds: interval, timeout_seconds: timeout, monitor_type: type });
+      const m = await apiPost('/api/v1/monitors/', { name, url, interval_seconds: interval, timeout_seconds: timeout, monitor_type: type });
       state.monitors.unshift(m);
       if (state.stats) state.stats.total_monitors++;
     } else {
@@ -1543,12 +1941,49 @@ function clearForm() {
 }
 
 el('add-modal').addEventListener('click', e => { if (e.target === el('add-modal')) closeAddModal(); });
+el('monitor-detail-modal').addEventListener('click', e => {
+  if (e.target === el('monitor-detail-modal')) closeMonitorDetailModal();
+});
+el('heartbeat-detail-modal').addEventListener('click', e => {
+  if (e.target === el('heartbeat-detail-modal')) closeHeartbeatDetailModal();
+});
+el('alert-detail-modal').addEventListener('click', e => {
+  if (e.target === el('alert-detail-modal')) closeAlertDetailModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeAddModal();
+    closeMonitorDetailModal();
+    closeHeartbeatDetailModal();
+    closeAlertDetailModal();
+  }
+});
 
 // ── View switching ─────────────────────────────────────
-function setView(v) {
+function setView(v, ev) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  // All views are displayed on the same page for now — just scroll
+  if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
+
+  const titleMap = {
+    dashboard: ['System / Dashboard', 'Overview'],
+    monitors: ['Monitoring / Monitors', 'Monitors'],
+    heartbeats: ['Monitoring / Heartbeats', 'Heartbeats'],
+    alerts: ['Incidents / Alerts', 'Active Alerts'],
+  };
+  const [crumb, heading] = titleMap[v] || titleMap.dashboard;
+  el('view-breadcrumb').textContent = crumb;
+  el('view-title').textContent = heading;
+
+  const panelMap = {
+    dashboard: 'stats-grid',
+    monitors: 'monitors-panel',
+    heartbeats: 'heartbeats-panel',
+    alerts: 'alerts-panel',
+  };
+  const target = el(panelMap[v]);
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 // ── Toast ──────────────────────────────────────────────

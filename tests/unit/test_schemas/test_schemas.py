@@ -71,6 +71,7 @@ def test_monitor_update_all_none() -> None:
 def test_monitor_response_from_attributes() -> None:
     now = datetime.utcnow()
     data = {
+        "id": 1,
         "name": "API", "url": "https://example.com",
         "monitor_type": "http", "interval_seconds": 60,
         "timeout_seconds": 5.0, "enabled": True,

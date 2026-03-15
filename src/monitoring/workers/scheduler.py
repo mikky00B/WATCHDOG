@@ -123,13 +123,13 @@ class MonitorScheduler:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Log any exceptions that occurred
-                for monitor, result in zip(due_monitors, results):
-                    if isinstance(result, Exception):
+                for monitor, outcome in zip(due_monitors, results):
+                    if isinstance(outcome, Exception):
                         logger.error(
                             "check_task_failed",
                             monitor_id=monitor.id,
                             monitor_name=monitor.name,
-                            error=str(result),
+                            error=str(outcome),
                         )
 
     def _is_check_due(self, monitor: Monitor) -> bool:

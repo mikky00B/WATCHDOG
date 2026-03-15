@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, PostgresDsn, EmailStr, field_validator
+from pydantic import AliasChoices, EmailStr, Field, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,15 +39,17 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=587)
     smtp_user: str | None = Field(default=None)
     smtp_password: str | None = Field(default=None)
-    smtp_from_email: str | None = Field(default=None)
-    from_email: EmailStr = "alerts@example.com"
+    from_email: EmailStr = Field(
+        default="alerts@example.com",
+        validation_alias=AliasChoices("FROM_EMAIL", "SMTP_FROM_EMAIL"),
+    )
     alert_emails: list[EmailStr] = []
 
-    contact_email: str = "Clevermike02@gmail.com"
+    contact_email: EmailStr = Field(default="alerts@example.com")
 
     @field_validator("alert_emails", mode="before")
     @classmethod
-    def parse_alert_emails(cls, v):
+    def parse_alert_emails(cls, v: object) -> object:
         """Parse comma-separated email list from env."""
         if isinstance(v, str):
             # Handle comma-separated string from .env
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
     # Alerting - Telegram
     telegram_bot_token: str | None = Field(default=None)
     telegram_webhook_secret: str | None = Field(default=None)
+    telegram_webhook_url: str | None = Field(default=None)
     telegram_allowed_chat_ids: list[str] = []
 
     # Logging
@@ -67,7 +70,7 @@ class Settings(BaseSettings):
 
     @field_validator("telegram_allowed_chat_ids", mode="before")
     @classmethod
-    def parse_telegram_chat_ids(cls, v):
+    def parse_telegram_chat_ids(cls, v: object) -> object:
         """Parse comma-separated chat ID list from env."""
         if isinstance(v, str):
             return [chat_id.strip() for chat_id in v.split(",") if chat_id.strip()]

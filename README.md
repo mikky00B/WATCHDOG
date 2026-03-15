@@ -129,6 +129,7 @@ SMTP_PORT=587
 SMTP_USER=alerts@example.com
 SMTP_PASSWORD=your-app-password
 SMTP_FROM_EMAIL=alerts@example.com
+ALERT_EMAILS=alerts@example.com,ops@example.com
 
 # Slack alerts
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
@@ -136,7 +137,8 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 # Telegram alerts + bot control
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
-TELEGRAM_ALLOWED_CHAT_IDS=[]
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/integrations/telegram/webhook
+TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
 ```
 
 ---
@@ -216,6 +218,7 @@ Telegram integration uses webhook mode only (no polling).
 ```env
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/integrations/telegram/webhook
 TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
 ```
 

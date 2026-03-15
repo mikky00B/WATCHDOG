@@ -40,7 +40,8 @@ async def test_get_heartbeat_not_found(test_db: AsyncSession) -> None:
 @pytest.mark.unit
 async def test_list_heartbeats(test_db: AsyncSession, sample_heartbeat: Heartbeat) -> None:
     service = HeartbeatService(test_db)
-    items = await service.list_heartbeats()
+    items, total = await service.list_heartbeats()
+    assert total >= 1
     assert any(h.id == sample_heartbeat.id for h in items)
 
 

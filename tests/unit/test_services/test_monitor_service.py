@@ -64,8 +64,9 @@ async def test_get_monitor_by_internal_id(test_db: AsyncSession, sample_monitor:
 @pytest.mark.unit
 async def test_list_monitors(test_db: AsyncSession, sample_monitor: Monitor) -> None:
     service = MonitorService(test_db)
-    monitors = await service.list_monitors()
+    monitors, total = await service.list_monitors()
     assert len(monitors) >= 1
+    assert total >= 1
     assert any(m.id == sample_monitor.id for m in monitors)
 
 
@@ -78,7 +79,7 @@ async def test_list_monitors_enabled_only(test_db: AsyncSession) -> None:
     # Disable it
     await service.update_monitor(disabled.public_id, MonitorUpdate(enabled=False))
 
-    enabled = await service.list_monitors(enabled_only=True)
+    enabled, _ = await service.list_monitors(enabled_only=True)
     assert all(m.enabled for m in enabled)
 
 
@@ -88,8 +89,8 @@ async def test_list_monitors_pagination(test_db: AsyncSession) -> None:
     for i in range(5):
         await service.create_monitor(MonitorCreate(name=f"Monitor {i}", url=f"https://m{i}.com", interval_seconds=60))
 
-    page1 = await service.list_monitors(skip=0, limit=3)
-    page2 = await service.list_monitors(skip=3, limit=3)
+    page1, _ = await service.list_monitors(skip=0, limit=3)
+    page2, _ = await service.list_monitors(skip=3, limit=3)
     assert len(page1) == 3
     assert len(page2) >= 2  # at least 2 remain
 
