@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from monitoring.dependencies import DbSession
 from monitoring.schemas.monitor import (
@@ -51,10 +51,10 @@ async def get_monitor(
 
 @router.get("/", response_model=MonitorList)
 async def list_monitors(
-    skip: int = 0,
-    limit: int = 100,
+    db: DbSession,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
     enabled_only: bool = False,
-    db: DbSession = ...,  # type: ignore[assignment]
 ) -> MonitorList:
     """List all monitors."""
     service = MonitorService(db)
@@ -92,7 +92,7 @@ async def update_monitor(
 async def delete_monitor(
     monitor_id: uuid.UUID,
     db: DbSession,
-):
+) -> Response:
     """Delete a monitor."""
     service = MonitorService(db)
     deleted = await service.delete_monitor(monitor_id)
@@ -102,3 +102,5 @@ async def delete_monitor(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Monitor {monitor_id} not found",
         )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

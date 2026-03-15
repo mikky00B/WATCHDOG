@@ -16,11 +16,6 @@ from monitoring.services.monitor_service import MonitorService
 
 logger = structlog.get_logger(__name__)
 
-WEBHOOK_URL = (
-    "https://mathilda-repletive-detractingly.ngrok-free.dev/"
-    "api/v1/integrations/telegram/webhook"
-)
-
 
 class TelegramService:
     """Handle Telegram commands and callback queries."""
@@ -132,7 +127,7 @@ class TelegramService:
 
     async def _handle_status(self, chat_id: str) -> None:
         monitors, total_monitors = await self.monitor_service.list_monitors(limit=10000)
-        _, enabled_monitors = await self.monitor_service.list_monitors(
+        enabled_monitors, _ = await self.monitor_service.list_monitors(
             enabled_only=True,
             limit=10000,
         )
@@ -146,7 +141,7 @@ class TelegramService:
         status_message = (
             "*WATCHDOG Status*\n"
             f"Total monitors: {total_monitors}\n"
-            f"Enabled monitors: {enabled_monitors}\n"
+            f"Enabled monitors: {len(enabled_monitors)}\n"
             f"Active alerts: {active_alerts}\n"
             f"Failed checks (24h): {failed_checks_24h}"
         )
@@ -221,7 +216,7 @@ class TelegramService:
 
         await self.monitor_service.update_monitor(
             monitor.public_id,
-            MonitorUpdate(enabled=True),
+            MonitorUpdate.model_validate({"enabled": True}),
         )
         await self._send_message(chat_id, f"Monitor {monitor_id} enabled")
 
@@ -242,7 +237,7 @@ class TelegramService:
 
         await self.monitor_service.update_monitor(
             monitor.public_id,
-            MonitorUpdate(enabled=False),
+            MonitorUpdate.model_validate({"enabled": False}),
         )
         await self._send_message(chat_id, f"Monitor {monitor_id} disabled")
 
@@ -304,7 +299,7 @@ class TelegramService:
         self,
         chat_id: str,
         text_message: str,
-        reply_markup: dict | None = None,
+        reply_markup: dict[str, object] | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "chat_id": chat_id,
@@ -326,7 +321,7 @@ class TelegramService:
         chat_id: str,
         message_id: int,
         text_message: str,
-        reply_markup: dict | None = None,
+        reply_markup: dict[str, object] | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "chat_id": chat_id,
@@ -414,10 +409,16 @@ async def register_webhook() -> bool:
             reason="missing_webhook_secret",
         )
         return False
+    if not settings.telegram_webhook_url:
+        logger.warning(
+            "telegram_webhook_registration_skipped",
+            reason="missing_webhook_url",
+        )
+        return False
 
     api_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/setWebhook"
     payload = {
-        "url": WEBHOOK_URL,
+        "url": settings.telegram_webhook_url,
         "secret_token": settings.telegram_webhook_secret,
     }
 
@@ -428,7 +429,10 @@ async def register_webhook() -> bool:
             data = response.json()
             ok = bool(data.get("ok"))
             if ok:
-                logger.info("telegram_webhook_registered", webhook_url=WEBHOOK_URL)
+                logger.info(
+                    "telegram_webhook_registered",
+                    webhook_url=settings.telegram_webhook_url,
+                )
             else:
                 logger.error(
                     "telegram_webhook_registration_failed",

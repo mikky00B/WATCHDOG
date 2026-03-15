@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
 
 from monitoring.alerting.email import EmailAlertChannel
 from monitoring.config import get_settings
@@ -43,6 +50,26 @@ async def main() -> None:
 
     # Add email channel if configured
     if settings.email_enabled:
+        missing: list[str] = []
+        if not settings.smtp_host:
+            missing.append("SMTP_HOST")
+        if not settings.smtp_user:
+            missing.append("SMTP_USER")
+        if not settings.smtp_password:
+            missing.append("SMTP_PASSWORD")
+        if not settings.alert_emails:
+            missing.append("ALERT_EMAILS")
+
+        if missing:
+            logger.error(
+                "email_config_incomplete",
+                missing_vars=missing,
+            )
+            raise ValueError(
+                "Email enabled but missing required settings: "
+                + ", ".join(missing)
+            )
+
         try:
             email_channel = EmailAlertChannel(
                 smtp_host=settings.smtp_host,

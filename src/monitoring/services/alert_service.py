@@ -267,7 +267,7 @@ class AlertService:
         self,
         monitor_id: int | None = None,
         days: int = 7,
-    ) -> dict:
+    ) -> dict[str, object]:
         """
         Get alert statistics for a time period.
 

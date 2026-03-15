@@ -39,7 +39,7 @@ class RuleConfig:
     enabled: bool = True  # Allow disabling rules without deleting them
     metadata: dict[str, Any] | None = None  # Additional rule-specific config
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if self.threshold <= 0:
             raise ValueError("threshold must be positive")

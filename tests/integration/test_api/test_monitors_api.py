@@ -68,7 +68,7 @@ async def test_list_monitors_empty(test_db: AsyncSession) -> None:
         resp = await client.get("/api/v1/monitors/")
     app.dependency_overrides.clear()
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json() == {"monitors": [], "total": 0}
 
 
 @pytest.mark.integration
@@ -81,7 +81,7 @@ async def test_list_monitors_returns_created(test_db: AsyncSession) -> None:
     app.dependency_overrides.clear()
 
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["monitors"]) == 1
 
 
 @pytest.mark.integration

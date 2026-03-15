@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import httpx
 import structlog
 
@@ -51,36 +53,40 @@ class SlackAlertChannel(AlertChannel):
         }
         color = color_map.get(payload.severity.lower(), "#808080")
 
-        slack_payload = {
-            "text": f"{emoji} *{payload.title}*",
-            "attachments": [
+        attachment: dict[str, object] = {
+            "color": color,
+            "fields": [
                 {
-                    "color": color,
-                    "fields": [
-                        {
-                            "title": "Monitor",
-                            "value": payload.monitor_name,
-                            "short": True,
-                        },
-                        {
-                            "title": "Severity",
-                            "value": payload.severity.upper(),
-                            "short": True,
-                        },
-                        {
-                            "title": "Message",
-                            "value": payload.message,
-                            "short": False,
-                        },
-                    ],
-                    "footer": "Monitoring Platform",
-                    "ts": payload.timestamp,
-                }
+                    "title": "Monitor",
+                    "value": payload.monitor_name,
+                    "short": True,
+                },
+                {
+                    "title": "Severity",
+                    "value": payload.severity.upper(),
+                    "short": True,
+                },
+                {
+                    "title": "Message",
+                    "value": payload.message,
+                    "short": False,
+                },
             ],
+            "footer": "Monitoring Platform",
+            "ts": int(datetime.fromisoformat(payload.timestamp).timestamp()),
+        }
+
+        slack_payload: dict[str, object] = {
+            "text": f"{emoji} *{payload.title}*",
+            "attachments": [attachment],
         }
 
         if payload.monitor_url:
-            slack_payload["attachments"][0]["fields"].append(
+            fields = attachment["fields"]
+            if not isinstance(fields, list):
+                logger.error("slack_invalid_payload_fields")
+                return False
+            fields.append(
                 {
                     "title": "Monitor URL",
                     "value": payload.monitor_url,
