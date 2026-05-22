@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from monitoring.main import app
 from monitoring.database import get_db
+from monitoring.main import app
+from monitoring.models.check_result import CheckResult
+from monitoring.services.checker_service import CheckerService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def _make_client(test_db: AsyncSession) -> AsyncClient:
@@ -140,6 +141,82 @@ async def test_delete_monitor_not_found(test_db: AsyncSession) -> None:
         resp = await client.delete(f"/api/v1/monitors/{uuid.uuid4()}")
     app.dependency_overrides.clear()
     assert resp.status_code == 404
+
+
+@pytest.mark.integration
+async def test_pause_and_resume_monitor(test_db: AsyncSession) -> None:
+    async with await _make_client(test_db) as client:
+        create = await client.post("/api/v1/monitors/", json={
+            "name": "Pausable", "url": "https://pause.com", "interval_seconds": 60,
+        })
+        pid = create.json()["public_id"]
+        pause = await client.post(f"/api/v1/monitors/{pid}/pause")
+        resume = await client.post(f"/api/v1/monitors/{pid}/resume")
+    app.dependency_overrides.clear()
+
+    assert pause.status_code == 200
+    assert pause.json()["enabled"] is False
+    assert pause.json()["status"] == "PAUSED"
+    assert resume.status_code == 200
+    assert resume.json()["enabled"] is True
+
+
+@pytest.mark.integration
+async def test_monitor_checks_and_stats(test_db: AsyncSession) -> None:
+    async with await _make_client(test_db) as client:
+        create = await client.post("/api/v1/monitors/", json={
+            "name": "Stats", "url": "https://stats.com", "interval_seconds": 60,
+        })
+        body = create.json()
+        check = CheckResult(
+            monitor_id=body["id"],
+            status_code=200,
+            latency_ms=42.5,
+            success=True,
+            error_message=None,
+        )
+        test_db.add(check)
+        await test_db.flush()
+
+        checks = await client.get(f"/api/v1/monitors/{body['public_id']}/checks")
+        stats = await client.get(f"/api/v1/monitors/{body['public_id']}/stats")
+    app.dependency_overrides.clear()
+
+    assert checks.status_code == 200
+    assert checks.json()["total"] == 1
+    assert checks.json()["results"][0]["success"] is True
+    assert stats.status_code == 200
+    assert stats.json()["total_checks"] == 1
+    assert stats.json()["uptime_percentage"] == 100.0
+    assert stats.json()["average_latency_ms"] == 42.5
+
+
+@pytest.mark.integration
+async def test_run_monitor_check(monkeypatch: pytest.MonkeyPatch, test_db: AsyncSession) -> None:
+    async def fake_check(self: CheckerService, monitor):
+        return CheckResult(
+            monitor_id=monitor.id,
+            status_code=200,
+            latency_ms=55.0,
+            success=True,
+            error_message=None,
+        )
+
+    monkeypatch.setattr(CheckerService, "check_http_endpoint", fake_check)
+
+    async with await _make_client(test_db) as client:
+        create = await client.post("/api/v1/monitors/", json={
+            "name": "Manual", "url": "https://manual.com", "interval_seconds": 60,
+        })
+        pid = create.json()["public_id"]
+        result = await client.post(f"/api/v1/monitors/{pid}/run-check")
+        monitor = await client.get(f"/api/v1/monitors/{pid}")
+    app.dependency_overrides.clear()
+
+    assert result.status_code == 200
+    assert result.json()["success"] is True
+    assert result.json()["status_code"] == 200
+    assert monitor.json()["status"] == "UP"
 
 
 @pytest.mark.integration

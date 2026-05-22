@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from monitoring.models.heartbeat import Heartbeat
+from monitoring.models.organization import Organization
 from monitoring.schemas.heartbeat import HeartbeatCreate, HeartbeatUpdate
 
 logger = structlog.get_logger(__name__)
@@ -29,7 +30,16 @@ class HeartbeatService:
         Returns:
             Created heartbeat
         """
-        heartbeat = Heartbeat(**data.model_dump())
+        heartbeat_data = data.model_dump()
+        organization_public_id = heartbeat_data.pop("organization_id", None)
+        if organization_public_id is not None:
+            organization = await self.get_organization_by_public_id(
+                organization_public_id,
+            )
+            if organization is None:
+                raise ValueError("Organization not found")
+            heartbeat_data["organization_id"] = organization.id
+        heartbeat = Heartbeat(**heartbeat_data)
         self.db.add(heartbeat)
         await self.db.flush()
         await self.db.refresh(heartbeat)
@@ -42,6 +52,14 @@ class HeartbeatService:
         )
 
         return heartbeat
+
+    async def get_organization_by_public_id(
+        self,
+        organization_id: uuid.UUID,
+    ) -> Organization | None:
+        stmt = select(Organization).where(Organization.public_id == organization_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_heartbeat(self, heartbeat_id: uuid.UUID) -> Heartbeat | None:
         """
@@ -61,6 +79,7 @@ class HeartbeatService:
         self,
         skip: int = 0,
         limit: int = 100,
+        organization_id: int | None = None,
     ) -> tuple[list[Heartbeat], int]:
         """
         List heartbeats with pagination.
@@ -73,6 +92,8 @@ class HeartbeatService:
             A tuple containing the list of heartbeats and the total count
         """
         base_stmt = select(Heartbeat)
+        if organization_id is not None:
+            base_stmt = base_stmt.where(Heartbeat.organization_id == organization_id)
 
         # Get total count
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -157,7 +178,7 @@ class HeartbeatService:
         if heartbeat is None:
             return None
 
-        heartbeat.last_heartbeat_at = datetime.now(timezone.utc)
+        heartbeat.last_heartbeat_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(heartbeat)
 

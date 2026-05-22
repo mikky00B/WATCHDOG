@@ -26,6 +26,11 @@ class CheckResult(Base):
         nullable=False,
         index=True,
     )
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
 
     # Check results
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)

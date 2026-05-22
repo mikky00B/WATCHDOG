@@ -7,16 +7,14 @@ The async SQLAlchemy engine is swapped to SQLite for all unit tests.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from monitoring.models.base import Base
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # ── SQLite in-memory engine ───────────────────────────────────────────────────
 # SQLite does not support all PostgreSQL features, but is sufficient for
@@ -150,3 +148,13 @@ def mock_httpx_response():
         resp.raise_for_status = MagicMock()
         return resp
     return _make
+
+
+@pytest.fixture(autouse=True)
+def disable_auth_verification_email(monkeypatch):
+    """Avoid real SMTP calls from auth registration tests."""
+
+    async def _noop(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("monitoring.services.auth_service.AuthService._send_verification_email", _noop)

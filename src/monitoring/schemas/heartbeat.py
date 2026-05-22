@@ -17,7 +17,7 @@ class HeartbeatBase(BaseModel):
 class HeartbeatCreate(HeartbeatBase):
     """Schema for creating a heartbeat."""
 
-    pass
+    organization_id: uuid.UUID | None = None
 
 
 class HeartbeatUpdate(BaseModel):
