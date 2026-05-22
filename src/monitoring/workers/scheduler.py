@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from monitoring.database import AsyncSessionLocal
+from monitoring.models.check_result import CheckResult
 from monitoring.models.monitor import Monitor
 from monitoring.services.alert_service import AlertService
 from monitoring.services.checker_service import CheckerService
+from monitoring.services.incident_service import IncidentService
 from monitoring.services.rule_engine import (
     RuleEngine,
     create_default_rules,
@@ -108,6 +110,8 @@ class MonitorScheduler:
             for monitor in monitors:
                 self._register_monitor_rules(monitor)
 
+            await self._record_missed_heartbeats(monitors, db)
+
             # Check which monitors are due
             due_monitors = [m for m in monitors if self._is_check_due(m)]
 
@@ -123,7 +127,7 @@ class MonitorScheduler:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Log any exceptions that occurred
-                for monitor, outcome in zip(due_monitors, results):
+                for monitor, outcome in zip(due_monitors, results, strict=False):
                     if isinstance(outcome, Exception):
                         logger.error(
                             "check_task_failed",
@@ -143,10 +147,69 @@ class MonitorScheduler:
             True if check is due, False otherwise
         """
         if monitor.last_checked_at is None:
+            if monitor.monitor_type == "HEARTBEAT":
+                return False
             return True
 
-        elapsed = (datetime.now(timezone.utc) - monitor.last_checked_at).total_seconds()
+        if monitor.monitor_type == "HEARTBEAT":
+            return False
+
+        now = datetime.now(UTC)
+        if monitor.next_check_at is not None:
+            next_check_at = monitor.next_check_at
+            if next_check_at.tzinfo is None:
+                next_check_at = next_check_at.replace(tzinfo=UTC)
+            return next_check_at <= now
+
+        last_checked_at = monitor.last_checked_at
+        if last_checked_at.tzinfo is None:
+            last_checked_at = last_checked_at.replace(tzinfo=UTC)
+        elapsed = (now - last_checked_at).total_seconds()
         return elapsed >= monitor.interval_seconds
+
+    async def _record_missed_heartbeats(
+        self,
+        monitors: list[Monitor],
+        db: AsyncSession,
+    ) -> None:
+        now = datetime.now(UTC)
+        missed_count = 0
+
+        for monitor in monitors:
+            if monitor.monitor_type != "HEARTBEAT" or monitor.next_check_at is None:
+                continue
+
+            next_check_at = monitor.next_check_at
+            if next_check_at.tzinfo is None:
+                next_check_at = next_check_at.replace(tzinfo=UTC)
+
+            if next_check_at > now:
+                continue
+
+            monitor.consecutive_failures += 1
+            monitor.consecutive_successes = 0
+            monitor.status = "DOWN"
+            monitor.last_checked_at = now
+            monitor.next_check_at = now + timedelta(seconds=monitor.interval_seconds)
+            db.add(
+                CheckResult(
+                    monitor_id=monitor.id,
+                    organization_id=monitor.organization_id,
+                    status_code=None,
+                    latency_ms=None,
+                    success=False,
+                    error_message="Heartbeat missed",
+                    checked_at=now,
+                )
+            )
+            await IncidentService(db).create_or_update_for_failed_check(
+                monitor,
+                "Heartbeat missed",
+            )
+            missed_count += 1
+
+        if missed_count:
+            await db.commit()
 
     async def _check_monitor(self, monitor: Monitor, db: AsyncSession) -> None:
         """
@@ -166,12 +229,32 @@ class MonitorScheduler:
 
             # Perform the check
             check_result = await self.checker_service.check_http_endpoint(monitor)
+            check_result.organization_id = monitor.organization_id
 
             # Save result
             db.add(check_result)
 
             # Update monitor last_checked_at (use timezone-aware datetime)
-            monitor.last_checked_at = datetime.now(timezone.utc)
+            monitor.last_checked_at = datetime.now(UTC)
+            monitor.next_check_at = monitor.last_checked_at + timedelta(
+                seconds=monitor.interval_seconds,
+            )
+            if check_result.success:
+                monitor.status = "UP"
+                monitor.consecutive_successes += 1
+                monitor.consecutive_failures = 0
+                await IncidentService(db).resolve_for_monitor(
+                    monitor,
+                    note="Monitor recovered automatically",
+                )
+            else:
+                monitor.status = "DOWN"
+                monitor.consecutive_failures += 1
+                monitor.consecutive_successes = 0
+                await IncidentService(db).create_or_update_for_failed_check(
+                    monitor,
+                    check_result.error_message or "Monitor check failed",
+                )
 
             await db.commit()
             await db.refresh(check_result)
@@ -198,7 +281,8 @@ class MonitorScheduler:
                 alert_service = AlertService(db)
                 for alert_data in alerts:
                     try:
-                        await alert_service.create_alert(alert_data)
+                        alert = await alert_service.create_alert(alert_data)
+                        alert.organization_id = monitor.organization_id
                     except Exception as exc:
                         logger.error(
                             "alert_creation_failed",

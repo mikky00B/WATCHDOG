@@ -24,6 +24,7 @@ class EmailAlertChannel(AlertChannel):
         from_email: str,
         to_emails: list[str],
         use_tls: bool = True,
+        use_ssl: bool = False,
         use_html: bool = True,
         timeout: int = 30,
     ):
@@ -34,11 +35,14 @@ class EmailAlertChannel(AlertChannel):
         self.from_email = from_email
         self.to_emails = to_emails
         self.use_tls = use_tls
+        self.use_ssl = use_ssl
         self.use_html = use_html
         self.timeout = timeout
+        self.last_error: str | None = None
 
     def validate_config(self) -> bool:
         """Validate email configuration."""
+        self.last_error = None
         if not all(
             [
                 self.smtp_host,
@@ -49,10 +53,12 @@ class EmailAlertChannel(AlertChannel):
                 self.to_emails,
             ]
         ):
+            self.last_error = "Email SMTP configuration is incomplete"
             logger.error("email_missing_required_config")
             return False
 
         if not isinstance(self.to_emails, list) or len(self.to_emails) == 0:
+            self.last_error = "Email recipients are missing"
             logger.error("email_invalid_recipients")
             return False
 
@@ -169,29 +175,29 @@ class EmailAlertChannel(AlertChannel):
                 <div class="label">Monitor</div>
                 <div class="value">{payload.monitor_name}</div>
             </div>
-            
+
             <div class="info-row">
                 <div class="label">Severity</div>
                 <div class="value">
                     <span class="severity-badge">{payload.severity.upper()}</span>
                 </div>
             </div>
-            
+
             <div class="info-row">
                 <div class="label">Title</div>
                 <div class="value">{payload.title}</div>
             </div>
-            
+
             <div class="info-row">
                 <div class="label">Time</div>
                 <div class="value">{payload.timestamp}</div>
             </div>
-            
+
             <div class="message-box">
                 <div class="label">Details</div>
                 <div class="value">{payload.message}</div>
             </div>
-            
+
             {f'<a href="{payload.monitor_url}" class="button">View Monitor</a>' if payload.monitor_url else ''}
         </div>
         <div class="footer">
@@ -238,6 +244,7 @@ This is an automated alert from your monitoring system.
             return False
 
         try:
+            self.last_error = None
             # Run synchronous SMTP operations in executor to avoid blocking
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._send_sync, payload)
@@ -249,6 +256,7 @@ This is an automated alert from your monitoring system.
                 error=str(exc),
                 exc_info=True,
             )
+            self.last_error = str(exc)
             return False
 
     def _send_sync(self, payload: AlertPayload) -> bool:
@@ -276,11 +284,9 @@ This is an automated alert from your monitoring system.
                 html_body = self._create_html_body(payload)
                 msg.attach(MIMEText(html_body, "html"))
 
-            # Send email
-            with smtplib.SMTP(
-                self.smtp_host, self.smtp_port, timeout=self.timeout
-            ) as server:
-                if self.use_tls:
+            smtp_cls = smtplib.SMTP_SSL if self.use_ssl else smtplib.SMTP
+            with smtp_cls(self.smtp_host, self.smtp_port, timeout=self.timeout) as server:
+                if self.use_tls and not self.use_ssl:
                     server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)
@@ -293,15 +299,20 @@ This is an automated alert from your monitoring system.
             )
             return True
 
-        except smtplib.SMTPAuthenticationError:
+        except smtplib.SMTPAuthenticationError as exc:
+            server_error = exc.smtp_error.decode(errors="replace")
+            self.last_error = f"SMTP authentication failed ({exc.smtp_code}): {server_error}"
             logger.error(
                 "email_authentication_failed",
                 smtp_host=self.smtp_host,
                 smtp_user=self.smtp_user,
+                smtp_code=exc.smtp_code,
+                smtp_error=server_error,
             )
             return False
 
         except smtplib.SMTPException as exc:
+            self.last_error = f"SMTP error: {exc}"
             logger.error(
                 "smtp_error",
                 error=str(exc),
@@ -310,6 +321,7 @@ This is an automated alert from your monitoring system.
             return False
 
         except Exception as exc:
+            self.last_error = str(exc)
             logger.error(
                 "email_send_failed",
                 error=str(exc),
@@ -334,10 +346,9 @@ This is an automated alert from your monitoring system.
     def _test_connection_sync(self) -> bool:
         """Synchronous connection test."""
         try:
-            with smtplib.SMTP(
-                self.smtp_host, self.smtp_port, timeout=self.timeout
-            ) as server:
-                if self.use_tls:
+            smtp_cls = smtplib.SMTP_SSL if self.use_ssl else smtplib.SMTP
+            with smtp_cls(self.smtp_host, self.smtp_port, timeout=self.timeout) as server:
+                if self.use_tls and not self.use_ssl:
                     server.starttls()
                 server.login(self.smtp_user, self.smtp_password)
             logger.info("email_connection_test_passed")

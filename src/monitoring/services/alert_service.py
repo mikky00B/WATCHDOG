@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from monitoring.models.alert import Alert
-from monitoring.schemas.alert import AlertCreate, AlertUpdate, AlertSeverity
+from monitoring.models.monitor import Monitor
+from monitoring.schemas.alert import AlertCreate, AlertSeverity, AlertUpdate
 
 logger = structlog.get_logger(__name__)
 
@@ -43,6 +44,9 @@ class AlertService:
 
         # Create new alert
         alert = Alert(**data.model_dump())
+        monitor = await self.db.get(Monitor, alert.monitor_id)
+        if monitor is not None:
+            alert.organization_id = monitor.organization_id
         self.db.add(alert)
         await self.db.flush()
         await self.db.refresh(alert)
@@ -67,7 +71,7 @@ class AlertService:
         Returns:
             Existing alert if found, None otherwise
         """
-        window_start = datetime.now(timezone.utc) - timedelta(
+        window_start = datetime.now(UTC) - timedelta(
             minutes=self.deduplication_window_minutes
         )
 
@@ -108,6 +112,7 @@ class AlertService:
         unresolved_only: bool = False,
         monitor_id: int | None = None,
         severity: AlertSeverity | None = None,
+        organization_id: int | None = None,
     ) -> tuple[list[Alert], int]:
         """
         List alerts with pagination and filters.
@@ -133,6 +138,9 @@ class AlertService:
 
         if severity is not None:
             base_stmt = base_stmt.where(Alert.severity == severity)
+
+        if organization_id is not None:
+            base_stmt = base_stmt.where(Alert.organization_id == organization_id)
 
         # Get total count
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -191,7 +199,7 @@ class AlertService:
         """
         update_data = AlertUpdate(
             resolved=True,
-            resolved_at=datetime.now(timezone.utc),
+            resolved_at=datetime.now(UTC),
         )
 
         alert = await self.update_alert(alert_id, update_data)
@@ -249,7 +257,7 @@ class AlertService:
         resolved_count = 0
         for alert in alerts:
             alert.resolved = True
-            alert.resolved_at = datetime.now(timezone.utc)
+            alert.resolved_at = datetime.now(UTC)
             resolved_count += 1
 
         if resolved_count > 0:
@@ -278,7 +286,7 @@ class AlertService:
         Returns:
             Dictionary with alert statistics
         """
-        window_start = datetime.now(timezone.utc) - timedelta(days=days)
+        window_start = datetime.now(UTC) - timedelta(days=days)
 
         base_stmt = select(Alert).where(Alert.triggered_at >= window_start)
 
@@ -325,7 +333,7 @@ class AlertService:
         Returns:
             Number of alerts auto-resolved
         """
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days)
 
         stmt = select(Alert).where(
             and_(
@@ -340,7 +348,7 @@ class AlertService:
         resolved_count = 0
         for alert in alerts:
             alert.resolved = True
-            alert.resolved_at = datetime.now(timezone.utc)
+            alert.resolved_at = datetime.now(UTC)
             resolved_count += 1
 
         if resolved_count > 0:
