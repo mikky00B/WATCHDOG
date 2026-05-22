@@ -2,21 +2,6 @@
 
 WATCHDOG is a FastAPI and React monitoring platform for agencies and teams that need uptime checks, heartbeat checks, incidents, client grouping, alert channels, status pages, and monthly reliability reports.
 
-## Current Features
-
-- Email-verified signup and login
-- Password reset by email code
-- Refresh-token sessions and logout revocation
-- Organization-scoped access control
-- Website, API, and heartbeat monitors
-- Manual check runs, pause/resume, check history, and monitor stats
-- Incident creation, acknowledgement, and resolution
-- Email and Telegram alert channels
-- Background scheduler for monitor checks
-- Background notification worker for queued alert events
-- Public status pages at `/status/:slug`
-- Monthly reliability reports with JSON and HTML output
-- React dashboard under `frontend/`
 
 ## Requirements
 
