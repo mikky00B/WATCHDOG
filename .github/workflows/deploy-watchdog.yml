@@ -23,7 +23,9 @@ jobs:
             pip install -e .
             python -m alembic upgrade head
             cd frontend
-            npm install
+            echo "VITE_API_BASE_URL=/api/v1" > .env
+            echo "VITE_APP_NAME=WATCHDOG" >> .env
+            npm ci
             npm run build
             cd ..
             sudo systemctl restart watchdog
