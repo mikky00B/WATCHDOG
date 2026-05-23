@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   Gauge,
   Home,
   LogOut,
+  Menu,
   MonitorCheck,
   Plus,
   RadioTower,
@@ -18,6 +19,7 @@ import {
   SquareChartGantt,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -408,9 +410,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function Shell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { organizations, selected } = useOrganizations();
+  const [isMobileNavOpen, setMobileNavOpen] = useState(false);
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
@@ -421,16 +425,47 @@ function Shell() {
     { to: "/app/reports", label: "Reports", icon: SquareChartGantt },
   ];
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Link className="brand" to="/app">
-          <ShieldAlert size={24} />
-          WATCHDOG
-        </Link>
+    <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
+      <button
+        className="nav-backdrop"
+        aria-label="Close navigation"
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside className="sidebar" aria-label="Primary navigation">
+        <div className="sidebar-head">
+          <Link className="brand" to="/app">
+            <ShieldAlert size={24} />
+            WATCHDOG
+          </Link>
+          <button
+            className="icon-button sidebar-close"
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X size={18} />
+          </button>
+        </div>
         <nav className="side-nav">
           {navItems.map((item) => (
-            <Link key={item.to} to={item.to}>
+            <Link
+              key={item.to}
+              className={
+                item.to === "/app"
+                  ? location.pathname === item.to
+                    ? "active"
+                    : undefined
+                  : location.pathname.startsWith(item.to)
+                    ? "active"
+                    : undefined
+              }
+              to={item.to}
+            >
               <item.icon size={18} />
               {item.label}
             </Link>
@@ -439,6 +474,14 @@ function Shell() {
       </aside>
       <div className="workspace">
         <header className="workspace-header">
+          <button
+            className="icon-button mobile-menu-button"
+            type="button"
+            aria-label="Open navigation"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu size={19} />
+          </button>
           <div>
             <span className="eyebrow">Workspace</span>
             <select
@@ -460,7 +503,7 @@ function Shell() {
               <Building2 size={16} />
               Organization
             </Link>
-            <span>{user?.full_name}</span>
+            <span className="workspace-user">{user?.full_name}</span>
             <button
               className="icon-button"
               title="Log out"
