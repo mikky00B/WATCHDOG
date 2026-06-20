@@ -228,6 +228,7 @@ def create_email_sender(settings: Settings, recipient: str) -> EmailAlertChannel
         to_emails=[recipient],
         use_tls=settings.smtp_use_tls,
         use_ssl=bool(settings.smtp_use_ssl),
+        from_name=settings.from_name,
     )
 
 

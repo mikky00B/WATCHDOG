@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 
 import structlog
 
+from monitoring.alerting.addressing import DEFAULT_FROM_NAME, format_from_address
 from monitoring.alerting.base import AlertChannel, AlertPayload
 
 logger = structlog.get_logger(__name__)
@@ -26,6 +27,7 @@ class EmailAlertChannel(AlertChannel):
         use_tls: bool = True,
         use_ssl: bool = False,
         use_html: bool = True,
+        from_name: str = DEFAULT_FROM_NAME,
         timeout: int = 30,
     ):
         self.smtp_host = smtp_host
@@ -33,6 +35,7 @@ class EmailAlertChannel(AlertChannel):
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
         self.from_email = from_email
+        self.from_name = from_name
         self.to_emails = to_emails
         self.use_tls = use_tls
         self.use_ssl = use_ssl
@@ -271,7 +274,7 @@ This is an automated alert from your monitoring system.
         """
         try:
             msg = MIMEMultipart("alternative")
-            msg["From"] = self.from_email
+            msg["From"] = format_from_address(self.from_email, self.from_name)
             msg["To"] = ", ".join(self.to_emails)
             msg["Subject"] = f"[{payload.severity.upper()}] {payload.title}"
 

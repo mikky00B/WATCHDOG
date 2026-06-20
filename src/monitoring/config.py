@@ -68,6 +68,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("FROM_EMAIL", "SMTP_FROM_EMAIL"),
     )
+    from_name: str = Field(
+        default="Michael from Watchdog",
+        validation_alias=AliasChoices("FROM_NAME", "SMTP_FROM_NAME"),
+    )
 
     contact_email: EmailStr = Field(default="alerts@example.com")
 

@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from monitoring.alerting.base import AlertPayload
+from monitoring.alerting.email import EmailAlertChannel
 from monitoring.alerting.slack import SlackAlertChannel
 from monitoring.alerting.webhook import WebhookAlertChannel
 
@@ -128,3 +129,42 @@ def test_alert_payload_with_url() -> None:
     p = AlertPayload(monitor_name="X", severity="critical", title="T", message="M",
                      timestamp="now", monitor_url="https://x.com")
     assert p.monitor_url == "https://x.com"
+
+
+@pytest.mark.unit
+def test_email_alert_uses_display_from_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent_messages = []
+
+    class FakeSMTP:
+        def __init__(self, host: str, port: int, timeout: int):
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def starttls(self) -> None:
+            pass
+
+        def login(self, user: str, password: str) -> None:
+            pass
+
+        def send_message(self, message) -> None:
+            sent_messages.append(message)
+
+    monkeypatch.setattr("monitoring.alerting.email.smtplib.SMTP", FakeSMTP)
+    channel = EmailAlertChannel(
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        smtp_user="sender@example.com",
+        smtp_password="secret",
+        from_email="michael@yourdomain.com",
+        to_emails=["user@example.com"],
+    )
+
+    assert channel._send_sync(_payload()) is True
+    assert sent_messages[0]["From"] == "Michael from Watchdog <michael@yourdomain.com>"

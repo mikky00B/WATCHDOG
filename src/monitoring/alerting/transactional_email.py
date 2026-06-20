@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 
 import structlog
 
+from monitoring.alerting.addressing import format_from_address
 from monitoring.config import Settings, get_settings
 
 logger = structlog.get_logger(__name__)
@@ -93,8 +94,9 @@ class TransactionalEmailSender:
 
     def _send_sync(self, to_email: str, subject: str, plain_body: str, html_body: str) -> bool:
         try:
+            from_email = str(self.settings.from_email or self.settings.smtp_user or "")
             message = MIMEMultipart("alternative")
-            message["From"] = str(self.settings.from_email or self.settings.smtp_user or "")
+            message["From"] = format_from_address(from_email, self.settings.from_name)
             message["To"] = to_email
             message["Subject"] = subject
             message.attach(MIMEText(plain_body, "plain"))
