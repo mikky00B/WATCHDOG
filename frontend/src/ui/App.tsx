@@ -75,6 +75,24 @@ function useNotify() {
   return useContext(NotificationContext);
 }
 
+function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const notify = useCallback<Notify>((message, tone = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [...current, { id, tone, message }].slice(-3));
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 4200);
+  }, []);
+
+  return (
+    <NotificationContext.Provider value={notify}>
+      {children}
+      <ToastStack toasts={toasts} dismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+    </NotificationContext.Provider>
+  );
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "Not yet";
   return new Intl.DateTimeFormat(undefined, {
@@ -213,6 +231,7 @@ function LandingPage() {
 function AuthPage({ mode }: { mode: "login" | "register" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const notify = useNotify();
   const routeNotice =
     typeof (location.state as { notice?: unknown } | null)?.notice === "string"
       ? String((location.state as { notice: string }).notice)
@@ -237,16 +256,19 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
         setToken(data.access_token);
         setRefreshToken(data.refresh_token);
         queryClient.setQueryData(["me"], data.user);
+        notify(`Welcome back, ${data.user.full_name}.`);
         navigate("/app");
         return;
       }
       setVerificationEmail(data.user.email);
       setNotice(data.message);
+      notify(data.message, "info");
     },
   });
   const verifyMutation = useMutation({
     mutationFn: () => authService.verifyEmail({ email: verificationEmail, code: verificationCode }),
     onSuccess: () => {
+      notify("Email verified. You can log in now.");
       navigate("/login", { state: { notice: "Email verified. You can log in now." } });
     },
   });
@@ -255,6 +277,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
     onSuccess: (data) => {
       setVerificationEmail(data.user.email);
       setNotice(data.message);
+      notify(data.message, "info");
     },
   });
 
@@ -358,6 +381,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
 
 function PasswordResetPage() {
   const navigate = useNavigate();
+  const notify = useNotify();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -368,11 +392,15 @@ function PasswordResetPage() {
     onSuccess: (data) => {
       setCodeSent(true);
       setNotice(data.message);
+      notify(data.message, "info");
     },
   });
   const resetMutation = useMutation({
     mutationFn: () => authService.resetPassword({ email, code, new_password: newPassword }),
-    onSuccess: () => navigate("/login", { state: { notice: "Password reset. Log in with your new password." } }),
+    onSuccess: () => {
+      notify("Password reset. Log in with your new password.");
+      navigate("/login", { state: { notice: "Password reset. Log in with your new password." } });
+    },
   });
 
   return (
@@ -450,14 +478,7 @@ function Shell() {
   const { organizations, selected } = useOrganizations();
   const [isMobileNavOpen, setMobileNavOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const notify = useCallback<Notify>((message, tone = "success") => {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current, { id, tone, message }].slice(-3));
-    window.setTimeout(() => {
-      setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, 4200);
-  }, []);
+  const notify = useNotify();
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
@@ -481,12 +502,12 @@ function Shell() {
     }
     clearToken();
     queryClient.clear();
-    navigate("/login");
+    notify("Logged out.");
+    navigate("/login", { state: { notice: "Logged out." } });
   }
 
   return (
-    <NotificationContext.Provider value={notify}>
-      <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
+    <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
         <button
           className="nav-backdrop"
           aria-label="Close navigation"
@@ -601,9 +622,7 @@ function Shell() {
             </Routes>
           </main>
         </div>
-        <ToastStack toasts={toasts} dismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
-      </div>
-    </NotificationContext.Provider>
+    </div>
   );
 }
 
@@ -2265,21 +2284,23 @@ function TableSkeleton() {
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/status/:slug" element={<PublicStatusPage />} />
-      <Route path="/login" element={<AuthPage mode="login" />} />
-      <Route path="/register" element={<AuthPage mode="register" />} />
-      <Route path="/forgot-password" element={<PasswordResetPage />} />
-      <Route
-        path="/app/*"
-        element={
-          <RequireAuth>
-            <Shell />
-          </RequireAuth>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <NotificationProvider>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/status/:slug" element={<PublicStatusPage />} />
+        <Route path="/login" element={<AuthPage mode="login" />} />
+        <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/forgot-password" element={<PasswordResetPage />} />
+        <Route
+          path="/app/*"
+          element={
+            <RequireAuth>
+              <Shell />
+            </RequireAuth>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </NotificationProvider>
   );
 }
