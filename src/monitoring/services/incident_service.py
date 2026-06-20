@@ -128,13 +128,6 @@ class IncidentService:
             await self.add_update(incident, note, user=user)
         await self.db.flush()
         await self.db.refresh(incident)
-        from monitoring.services.notification_service import AlertEventService
-
-        await AlertEventService(self.db).queue_for_incident(
-            incident,
-            event_type="MONITOR_RECOVERED",
-            message=note or "Monitor recovered",
-        )
         return incident
 
     async def resolve_incident(
@@ -158,6 +151,13 @@ class IncidentService:
             await self.add_update(incident, note, user=user)
         await self.db.flush()
         await self.db.refresh(incident)
+        from monitoring.services.notification_service import AlertEventService
+
+        await AlertEventService(self.db).queue_for_incident(
+            incident,
+            event_type="MONITOR_RECOVERED",
+            message=note or "Monitor recovered",
+        )
         return incident
 
     async def add_update(
