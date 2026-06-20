@@ -11,6 +11,7 @@ from monitoring.schemas.status_page import (
     StatusPageList,
     StatusPageResponse,
     StatusPageServiceCreate,
+    StatusPageServiceList,
     StatusPageServiceResponse,
     StatusPageUpdate,
 )
@@ -150,6 +151,40 @@ async def add_status_page_service(
     if service is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return StatusPageServiceResponse.model_validate(service)
+
+
+@router.get("/{status_page_id}/services", response_model=StatusPageServiceList)
+async def list_status_page_services(
+    status_page_id: uuid.UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> StatusPageServiceList:
+    await _ensure_page_access(db, status_page_id, current_user)
+    result = await StatusPageService(db).list_services(status_page_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    services, total = result
+    return StatusPageServiceList(
+        services=[StatusPageServiceResponse.model_validate(service) for service in services],
+        total=total,
+    )
+
+
+@router.delete(
+    "/{status_page_id}/services/{service_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_status_page_service(
+    status_page_id: uuid.UUID,
+    service_id: uuid.UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> Response:
+    await _ensure_page_access(db, status_page_id, current_user)
+    deleted = await StatusPageService(db).delete_service(status_page_id, service_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @public_router.get("/{slug}", response_model=PublicStatusPageResponse)

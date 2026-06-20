@@ -28,7 +28,6 @@ from monitoring.database import close_db, init_db
 from monitoring.dependencies import DbSession, OptionalCurrentUser
 from monitoring.models.alert import Alert
 from monitoring.models.check_result import CheckResult
-from monitoring.models.heartbeat import Heartbeat
 from monitoring.models.monitor import Monitor
 from monitoring.services.checker_service import CheckerService
 from monitoring.services.organization_service import OrganizationService
@@ -53,8 +52,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("application_startup")
 
-    # Initialize database (development only - use Alembic in production)
-    await init_db()
+    if settings.auto_create_tables:
+        # Development convenience only. Production schema creation must use Alembic.
+        await init_db()
+        logger.info("database_auto_create_tables_completed")
     scheduler: MonitorScheduler | None = None
     scheduler_task: asyncio.Task[None] | None = None
     notification_worker = NotificationWorker(settings=settings)
@@ -221,12 +222,10 @@ async def get_stats(
     monitor_stmt = select(Monitor)
     check_stmt = select(CheckResult)
     alert_stmt = select(Alert)
-    heartbeat_stmt = select(Heartbeat)
     if internal_organization_id is not None:
         monitor_stmt = monitor_stmt.where(Monitor.organization_id == internal_organization_id)
         check_stmt = check_stmt.where(CheckResult.organization_id == internal_organization_id)
         alert_stmt = alert_stmt.where(Alert.organization_id == internal_organization_id)
-        heartbeat_stmt = heartbeat_stmt.where(Heartbeat.organization_id == internal_organization_id)
 
     total_monitors = (
         await db.execute(select(func.count()).select_from(monitor_stmt.subquery()))
@@ -256,7 +255,11 @@ async def get_stats(
         )
     ).scalar() or 0
     total_heartbeats = (
-        await db.execute(select(func.count()).select_from(heartbeat_stmt.subquery()))
+        await db.execute(
+            select(func.count()).select_from(
+                monitor_stmt.where(Monitor.monitor_type == "HEARTBEAT").subquery(),
+            )
+        )
     ).scalar() or 0
 
     return {

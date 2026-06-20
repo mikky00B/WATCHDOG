@@ -135,6 +135,48 @@ class StatusPageService:
         await self.db.refresh(service)
         return service
 
+    async def list_services(
+        self,
+        status_page_id: uuid.UUID,
+    ) -> tuple[list[StatusPageServiceModel], int] | None:
+        status_page = await self.get_status_page(status_page_id)
+        if status_page is None:
+            return None
+
+        stmt = select(StatusPageServiceModel).where(
+            StatusPageServiceModel.status_page_id == status_page.id,
+        )
+        total = (
+            await self.db.execute(select(func.count()).select_from(stmt.subquery()))
+        ).scalar() or 0
+        result = await self.db.execute(
+            stmt.order_by(StatusPageServiceModel.sort_order.asc(), StatusPageServiceModel.id.asc()),
+        )
+        return list(result.scalars().all()), total
+
+    async def delete_service(
+        self,
+        status_page_id: uuid.UUID,
+        service_id: uuid.UUID,
+    ) -> bool:
+        status_page = await self.get_status_page(status_page_id)
+        if status_page is None:
+            return False
+
+        service = (
+            await self.db.execute(
+                select(StatusPageServiceModel).where(
+                    StatusPageServiceModel.public_id == service_id,
+                    StatusPageServiceModel.status_page_id == status_page.id,
+                ),
+            )
+        ).scalar_one_or_none()
+        if service is None:
+            return False
+
+        await self.db.delete(service)
+        return True
+
     async def get_public_status_page(self, slug: str) -> dict[str, object] | None:
         status_page = (
             await self.db.execute(

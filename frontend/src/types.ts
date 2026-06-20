@@ -115,6 +115,29 @@ export type StatusPage = {
   updated_at: string;
 };
 
+export type StatusPageService = {
+  id: number;
+  public_id: string;
+  status_page_id: number;
+  monitor_id: number;
+  display_name: string;
+  sort_order: number;
+  is_visible: boolean;
+};
+
+export type Alert = {
+  id: number;
+  monitor_id: number;
+  severity: "info" | "warning" | "error" | "critical";
+  title: string;
+  message: string;
+  resolved: boolean;
+  acknowledged: boolean;
+  triggered_at: string;
+  resolved_at: string | null;
+  created_at: string;
+};
+
 export type PublicStatusPage = {
   name: string;
   slug: string;

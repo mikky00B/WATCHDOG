@@ -42,6 +42,11 @@ class StatusPageServiceResponse(BaseModel):
     is_visible: bool
 
 
+class StatusPageServiceList(BaseModel):
+    services: list[StatusPageServiceResponse]
+    total: int
+
+
 class StatusPageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

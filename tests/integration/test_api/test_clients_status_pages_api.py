@@ -136,7 +136,19 @@ async def test_client_scoped_monitor_and_public_status_page(test_db: AsyncSessio
             },
             headers=headers,
         )
+        services = await client.get(
+            f"/api/v1/status-pages/{page.json()['public_id']}/services",
+            headers=headers,
+        )
         public = await client.get("/api/v1/public/status-pages/acme-status")
+        deleted_service = await client.delete(
+            f"/api/v1/status-pages/{page.json()['public_id']}/services/{service.json()['public_id']}",
+            headers=headers,
+        )
+        services_after_delete = await client.get(
+            f"/api/v1/status-pages/{page.json()['public_id']}/services",
+            headers=headers,
+        )
     app.dependency_overrides.clear()
 
     assert created_client.status_code == 201
@@ -146,7 +158,12 @@ async def test_client_scoped_monitor_and_public_status_page(test_db: AsyncSessio
     assert monitors.json()["total"] == 1
     assert page.status_code == 201
     assert service.status_code == 201
+    assert services.status_code == 200
+    assert services.json()["total"] == 1
     assert public.status_code == 200
     assert public.json()["name"] == "Acme Status"
     assert public.json()["overall_status"] == "OPERATIONAL"
     assert public.json()["services"][0]["display_name"] == "Website"
+    assert deleted_service.status_code == 204
+    assert services_after_delete.status_code == 200
+    assert services_after_delete.json()["total"] == 0
