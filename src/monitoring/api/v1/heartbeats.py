@@ -1,3 +1,12 @@
+"""Legacy standalone heartbeat endpoints.
+
+The product-facing heartbeat path is now heartbeat-type Monitor records:
+create a monitor with ``monitor_type="HEARTBEAT"`` and ping the returned
+``/api/v1/monitors/heartbeat/{heartbeat_key}`` URL. These standalone heartbeat
+records are kept as a deprecated legacy API until old clients are migrated.
+They do not create incidents, alerts, or status-page services.
+"""
+
 from __future__ import annotations
 
 import uuid
@@ -14,7 +23,7 @@ from monitoring.schemas.heartbeat import (
 from monitoring.services.heartbeat_service import HeartbeatService
 from monitoring.services.organization_service import OrganizationService
 
-router = APIRouter()
+router = APIRouter(deprecated=True)
 
 
 @router.post(

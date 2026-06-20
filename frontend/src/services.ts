@@ -1,6 +1,7 @@
 import { apiRequest, makeQuery } from "./lib/api";
 import type {
   AuthResponse,
+  Alert,
   CheckResult,
   Client,
   DashboardStats,
@@ -14,6 +15,7 @@ import type {
   PublicStatusPage,
   RegisterResponse,
   StatusPage,
+  StatusPageService,
   User,
 } from "./types";
 
@@ -115,6 +117,29 @@ export const clientService = {
       body: payload,
     });
   },
+  update(organizationId: string, id: string, payload: Record<string, unknown>) {
+    return apiRequest<Client>(`/organizations/${organizationId}/clients/${id}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+  remove(organizationId: string, id: string) {
+    return apiRequest<void>(`/organizations/${organizationId}/clients/${id}`, { method: "DELETE" });
+  },
+};
+
+export const alertService = {
+  list(organizationId?: string, unresolvedOnly?: boolean) {
+    return apiRequest<ListResponse<Alert, "alerts">>(
+      `/alerts/${makeQuery({ organization_id: organizationId, unresolved_only: unresolvedOnly })}`,
+    );
+  },
+  acknowledge(id: number) {
+    return apiRequest<Alert>(`/alerts/${id}/acknowledge`, { method: "POST" });
+  },
+  resolve(id: number) {
+    return apiRequest<Alert>(`/alerts/${id}/resolve`, { method: "POST" });
+  },
 };
 
 export const incidentService = {
@@ -147,6 +172,9 @@ export const alertChannelService = {
   create(payload: Record<string, unknown>) {
     return apiRequest<NotificationChannel>("/alert-channels/", { method: "POST", body: payload });
   },
+  update(id: number, payload: Record<string, unknown>) {
+    return apiRequest<NotificationChannel>(`/alert-channels/${id}`, { method: "PATCH", body: payload });
+  },
   test(id: number) {
     return apiRequest<unknown>(`/alert-channels/${id}/test`, { method: "POST" });
   },
@@ -164,11 +192,23 @@ export const statusPageService = {
   create(payload: Record<string, unknown>) {
     return apiRequest<StatusPage>("/status-pages/", { method: "POST", body: payload });
   },
+  update(id: string, payload: Record<string, unknown>) {
+    return apiRequest<StatusPage>(`/status-pages/${id}`, { method: "PATCH", body: payload });
+  },
+  remove(id: string) {
+    return apiRequest<void>(`/status-pages/${id}`, { method: "DELETE" });
+  },
+  services(id: string) {
+    return apiRequest<ListResponse<StatusPageService, "services">>(`/status-pages/${id}/services`);
+  },
   addService(statusPageId: string, payload: Record<string, unknown>) {
     return apiRequest<unknown>(`/status-pages/${statusPageId}/services`, {
       method: "POST",
       body: payload,
     });
+  },
+  removeService(statusPageId: string, serviceId: string) {
+    return apiRequest<void>(`/status-pages/${statusPageId}/services/${serviceId}`, { method: "DELETE" });
   },
   public(slug: string) {
     return apiRequest<PublicStatusPage>(`/public/status-pages/${slug}`, { auth: false });

@@ -301,6 +301,10 @@ async def test_create_and_ping_heartbeat_monitor(test_db: AsyncSession) -> None:
         )
         heartbeat_url = created.json()["heartbeat_url"]
         ping = await client.post(heartbeat_url)
+        stats = await client.get(
+            f"/api/v1/stats?organization_id={org.json()['public_id']}",
+            headers=headers,
+        )
     app.dependency_overrides.clear()
 
     assert created.status_code == 201
@@ -310,3 +314,5 @@ async def test_create_and_ping_heartbeat_monitor(test_db: AsyncSession) -> None:
     assert heartbeat_url.startswith("/api/v1/monitors/heartbeat/hb_")
     assert ping.status_code == 200
     assert ping.json()["last_checked_at"] is not None
+    assert stats.status_code == 200
+    assert stats.json()["total_heartbeats"] == 1

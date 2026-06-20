@@ -15,7 +15,11 @@ logger = structlog.get_logger(__name__)
 
 
 class HeartbeatService:
-    """Business logic for heartbeat management."""
+    """Business logic for deprecated standalone heartbeat records.
+
+    New product flows should use ``MonitorService`` with ``monitor_type="HEARTBEAT"``.
+    Standalone heartbeat records are retained only for backward compatibility.
+    """
 
     def __init__(self, db: AsyncSession):
         self.db = db

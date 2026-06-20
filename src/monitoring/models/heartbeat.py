@@ -10,7 +10,12 @@ from monitoring.models.base import Base
 
 
 class Heartbeat(Base):
-    """Heartbeat model for tracking service heartbeats."""
+    """Deprecated standalone heartbeat record.
+
+    User-facing heartbeat monitoring is implemented by ``Monitor`` rows with
+    ``monitor_type="HEARTBEAT"``. This table remains for legacy API clients and
+    does not participate in incidents, alerting, or status pages.
+    """
 
     __tablename__ = "heartbeats"
 

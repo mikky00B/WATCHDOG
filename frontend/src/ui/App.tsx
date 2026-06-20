@@ -5,25 +5,30 @@ import {
   AlertTriangle,
   Bell,
   Building2,
+  ChevronDown,
   CheckCircle2,
   Clock,
   Copy,
+  ExternalLink,
   Gauge,
   Home,
   LogOut,
   Menu,
   MonitorCheck,
+  Pencil,
   Plus,
   RadioTower,
   ShieldAlert,
   SquareChartGantt,
   Trash2,
+  UserCircle,
   Users,
   X,
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   alertChannelService,
+  alertService,
   authService,
   clientService,
   dashboardService,
@@ -44,6 +49,7 @@ import {
 } from "../lib/api";
 import type {
   AuthResponse,
+  Client,
   Monitor,
   MonitorStatus,
   MonitorType,
@@ -51,6 +57,7 @@ import type {
   NotificationChannel,
   Organization,
   RegisterResponse,
+  StatusPage,
 } from "../types";
 
 type AuthMutationResponse = AuthResponse | RegisterResponse;
@@ -415,9 +422,11 @@ function Shell() {
   const { user } = useAuth();
   const { organizations, selected } = useOrganizations();
   const [isMobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
+    { to: "/app/alerts", label: "Alerts", icon: Bell },
     { to: "/app/incidents", label: "Incidents", icon: AlertTriangle },
     { to: "/app/clients", label: "Clients", icon: Users },
     { to: "/app/alert-channels", label: "Alert Channels", icon: Bell },
@@ -427,7 +436,18 @@ function Shell() {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setAccountMenuOpen(false);
   }, [location.pathname]);
+
+  async function logout() {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      await authService.logout({ refresh_token: refreshToken }).catch(() => undefined);
+    }
+    clearToken();
+    queryClient.clear();
+    navigate("/login");
+  }
 
   return (
     <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
@@ -482,7 +502,7 @@ function Shell() {
           >
             <Menu size={19} />
           </button>
-          <div>
+          <div className="workspace-selector">
             <span className="eyebrow">Workspace</span>
             <select
               value={selected?.public_id ?? ""}
@@ -503,22 +523,28 @@ function Shell() {
               <Building2 size={16} />
               Organization
             </Link>
-            <span className="workspace-user">{user?.full_name}</span>
-            <button
-              className="icon-button"
-              title="Log out"
-              onClick={async () => {
-                const refreshToken = getRefreshToken();
-                if (refreshToken) {
-                  await authService.logout({ refresh_token: refreshToken }).catch(() => undefined);
-                }
-                clearToken();
-                queryClient.clear();
-                navigate("/login");
-              }}
-            >
-              <LogOut size={18} />
-            </button>
+            <div className="account-menu">
+              <button
+                className="account-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={isAccountMenuOpen}
+                onClick={() => setAccountMenuOpen((open) => !open)}
+              >
+                <UserCircle size={18} />
+                <span>{user?.full_name ?? "Account"}</span>
+                <ChevronDown size={15} />
+              </button>
+              {isAccountMenuOpen ? (
+                <div className="account-popover" role="menu">
+                  <strong>{user?.full_name ?? "Account"}</strong>
+                  <button type="button" role="menuitem" onClick={logout}>
+                    <LogOut size={16} />
+                    Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
         <main className="content">
@@ -528,6 +554,7 @@ function Shell() {
             <Route path="/monitors" element={<MonitorList organization={selected} />} />
             <Route path="/monitors/new" element={<CreateMonitor organization={selected} />} />
             <Route path="/monitors/:monitorId" element={<MonitorDetail />} />
+            <Route path="/alerts" element={<Alerts organization={selected} />} />
             <Route path="/incidents" element={<IncidentList organization={selected} />} />
             <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
             <Route path="/clients" element={<Clients organization={selected} />} />
@@ -680,6 +707,7 @@ function Overview({ organization }: { organization: Organization }) {
 }
 
 function MonitorList({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
   if (!organization) {
     return <EmptyOrganizations />;
   }
@@ -687,6 +715,10 @@ function MonitorList({ organization }: { organization?: Organization }) {
   const query = useQuery({
     queryKey: ["monitors", organization?.public_id],
     queryFn: () => monitorService.list(organization.public_id),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => monitorService.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["monitors"] }),
   });
   const monitors = query.data?.monitors ?? [];
 
@@ -700,6 +732,7 @@ function MonitorList({ organization }: { organization?: Organization }) {
       </PageHeader>
       {query.isLoading ? <TableSkeleton /> : null}
       {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
       {!query.isLoading && !monitors.length ? <EmptyInline text="No monitors yet." /> : null}
       {monitors.length ? (
         <DataTable
@@ -710,9 +743,23 @@ function MonitorList({ organization }: { organization?: Organization }) {
             monitor.heartbeat_url ?? monitor.url ?? "Heartbeat",
             <span className={statusClass(monitor.status)}>{monitor.status}</span>,
             formatDate(monitor.last_checked_at),
-            <Link className="button compact" to={`/app/monitors/${monitor.public_id}`}>
-              View
-            </Link>,
+            <div className="row-actions">
+              <Link className="button compact" to={`/app/monitors/${monitor.public_id}`}>
+                View
+              </Link>
+              <button
+                className="icon-button"
+                title="Delete monitor"
+                disabled={remove.isPending}
+                onClick={() => {
+                  if (confirm(`Delete monitor "${monitor.name}"?`)) {
+                    remove.mutate(monitor.public_id);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>,
           ])}
         />
       ) : null}
@@ -887,6 +934,7 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
 
 function MonitorDetail() {
   const { monitorId = "" } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["monitor", monitorId],
@@ -919,6 +967,39 @@ function MonitorDetail() {
     onSuccess: refreshMonitor,
   });
   const monitor = query.data;
+  const [editName, setEditName] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editInterval, setEditInterval] = useState(60);
+  const [editExpectedStatus, setEditExpectedStatus] = useState<number | "">("");
+  const [editThreshold, setEditThreshold] = useState<number | "">("");
+
+  useEffect(() => {
+    if (!monitor) return;
+    setEditName(monitor.name);
+    setEditUrl(monitor.url ?? "");
+    setEditInterval(monitor.interval_seconds);
+    setEditExpectedStatus(monitor.expected_status_code ?? "");
+    setEditThreshold(monitor.response_time_threshold_ms ?? "");
+  }, [monitor]);
+
+  const update = useMutation({
+    mutationFn: () =>
+      monitorService.update(monitorId, {
+        name: editName,
+        url: monitor?.monitor_type === "HEARTBEAT" ? undefined : editUrl || null,
+        interval_seconds: editInterval,
+        expected_status_code: editExpectedStatus === "" ? null : editExpectedStatus,
+        response_time_threshold_ms: editThreshold === "" ? null : editThreshold,
+      }),
+    onSuccess: refreshMonitor,
+  });
+  const remove = useMutation({
+    mutationFn: () => monitorService.remove(monitorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["monitors"] });
+      navigate("/app/monitors");
+    },
+  });
 
   return (
     <section>
@@ -937,10 +1018,24 @@ function MonitorDetail() {
             <button className="button primary" disabled={runCheck.isPending} onClick={() => runCheck.mutate()}>
               Run check
             </button>
+            <button
+              className="button secondary"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (confirm(`Delete monitor "${monitor.name}"?`)) {
+                  remove.mutate();
+                }
+              }}
+            >
+              <Trash2 size={16} />
+              Delete
+            </button>
           </PageHeader>
           {pause.isError ? <ErrorBox message={unwrapError(pause.error)} /> : null}
           {resume.isError ? <ErrorBox message={unwrapError(resume.error)} /> : null}
           {runCheck.isError ? <ErrorBox message={unwrapError(runCheck.error)} /> : null}
+          {update.isError ? <ErrorBox message={unwrapError(update.error)} /> : null}
+          {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
           <div className="metric-grid">
             <Metric label="Status" value={monitor.status} icon={Activity} />
             <Metric label="Type" value={monitor.monitor_type} icon={MonitorCheck} />
@@ -974,6 +1069,62 @@ function MonitorDetail() {
                 <dd>{formatDate(monitor.next_check_at)}</dd>
               </dl>
             </section>
+            <form
+              className="panel edit-panel"
+              onSubmit={(event) => {
+                event.preventDefault();
+                update.mutate();
+              }}
+            >
+              <h2>Edit monitor</h2>
+              <label>
+                Name
+                <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
+              </label>
+              {monitor.monitor_type !== "HEARTBEAT" ? (
+                <label>
+                  Target URL
+                  <input type="url" value={editUrl} onChange={(event) => setEditUrl(event.target.value)} required />
+                </label>
+              ) : null}
+              <div className="form-grid compact-grid">
+                <label>
+                  Interval seconds
+                  <input
+                    type="number"
+                    min={10}
+                    max={3600}
+                    value={editInterval}
+                    onChange={(event) => setEditInterval(Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  Expected status
+                  <input
+                    type="number"
+                    min={100}
+                    max={599}
+                    value={editExpectedStatus}
+                    onChange={(event) =>
+                      setEditExpectedStatus(event.target.value ? Number(event.target.value) : "")
+                    }
+                    disabled={monitor.monitor_type === "HEARTBEAT"}
+                  />
+                </label>
+                <label>
+                  Latency threshold
+                  <input
+                    type="number"
+                    min={1}
+                    value={editThreshold}
+                    onChange={(event) => setEditThreshold(event.target.value ? Number(event.target.value) : "")}
+                  />
+                </label>
+              </div>
+              <button className="button primary" disabled={update.isPending}>
+                {update.isPending ? "Saving..." : "Save changes"}
+              </button>
+            </form>
             <section className="panel">
               <h2>Recent checks</h2>
               {checks.isLoading ? <div className="skeleton table-skeleton" /> : null}
@@ -997,6 +1148,70 @@ function MonitorDetail() {
             </section>
           </div>
         </>
+      ) : null}
+    </section>
+  );
+}
+
+function Alerts({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["alerts", organization?.public_id],
+    queryFn: () => alertService.list(organization?.public_id),
+    enabled: Boolean(organization),
+  });
+  const acknowledge = useMutation({
+    mutationFn: (id: number) => alertService.acknowledge(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+  const resolve = useMutation({
+    mutationFn: (id: number) => alertService.resolve(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+  const alerts = query.data?.alerts ?? [];
+
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+
+  return (
+    <section>
+      <PageHeader title="Alerts" description="Triggered monitor alerts that need attention." />
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {acknowledge.isError ? <ErrorBox message={unwrapError(acknowledge.error)} /> : null}
+      {resolve.isError ? <ErrorBox message={unwrapError(resolve.error)} /> : null}
+      {!query.isLoading && !alerts.length ? <EmptyInline text="No alerts recorded." /> : null}
+      {alerts.length ? (
+        <DataTable
+          headers={["Alert", "Severity", "Status", "Monitor", "Created", "Message", ""]}
+          rows={alerts.map((alert) => [
+            alert.title,
+            alert.severity,
+            <span className={alert.resolved ? "status ok" : alert.acknowledged ? "status warn" : "status bad"}>
+              {alert.resolved ? "RESOLVED" : alert.acknowledged ? "ACKNOWLEDGED" : "OPEN"}
+            </span>,
+            `Monitor #${alert.monitor_id}`,
+            formatDate(alert.created_at || alert.triggered_at),
+            alert.message,
+            <div className="row-actions">
+              <button
+                className="button compact"
+                disabled={alert.acknowledged || alert.resolved || acknowledge.isPending}
+                onClick={() => acknowledge.mutate(alert.id)}
+              >
+                Acknowledge
+              </button>
+              <button
+                className="button compact"
+                disabled={alert.resolved || resolve.isPending}
+                onClick={() => resolve.mutate(alert.id)}
+              >
+                Resolve
+              </button>
+            </div>,
+          ])}
+        />
       ) : null}
     </section>
   );
@@ -1087,6 +1302,10 @@ function AlertChannels({ organization }: { organization?: Organization }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<NotificationChannel["channel_type"]>("EMAIL");
   const [target, setTarget] = useState("");
+  const [editing, setEditing] = useState<NotificationChannel | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTarget, setEditTarget] = useState("");
+  const [editActive, setEditActive] = useState(true);
   const create = useMutation({
     mutationFn: () =>
       alertChannelService.create({
@@ -1098,6 +1317,18 @@ function AlertChannels({ organization }: { organization?: Organization }) {
     onSuccess: () => {
       setName("");
       setTarget("");
+      queryClient.invalidateQueries({ queryKey: ["alert-channels"] });
+    },
+  });
+  const update = useMutation({
+    mutationFn: () =>
+      alertChannelService.update(editing!.id, {
+        name: editName,
+        config: editing!.channel_type === "EMAIL" ? { email: editTarget } : { chat_id: editTarget },
+        is_active: editActive,
+      }),
+    onSuccess: () => {
+      setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["alert-channels"] });
     },
   });
@@ -1127,6 +1358,31 @@ function AlertChannels({ organization }: { organization?: Organization }) {
         <button className="button primary">Create</button>
       </form>
       {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
+      {update.isError ? <ErrorBox message={unwrapError(update.error)} /> : null}
+      {editing ? (
+        <form
+          className="form-panel inline-form edit-strip"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update.mutate();
+          }}
+        >
+          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input value={editTarget} onChange={(event) => setEditTarget(event.target.value)} required />
+          <label className="check-label">
+            <input type="checkbox" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
+            Active
+          </label>
+          <div className="row-actions">
+            <button className="button primary" disabled={update.isPending}>
+              {update.isPending ? "Saving..." : "Save"}
+            </button>
+            <button className="button secondary" type="button" onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
       {query.isLoading ? <TableSkeleton /> : null}
       {!query.isLoading && !channels.length ? <EmptyInline text="No alert channels yet." /> : null}
       {channels.length ? (
@@ -1137,7 +1393,15 @@ function AlertChannels({ organization }: { organization?: Organization }) {
             channel.channel_type,
             String(channel.config.email ?? channel.config.chat_id ?? "Configured"),
             channel.is_active ? <span className="status ok">ACTIVE</span> : <span className="status muted">OFF</span>,
-            <ChannelActions channel={channel} />,
+            <ChannelActions
+              channel={channel}
+              onEdit={() => {
+                setEditing(channel);
+                setEditName(channel.name);
+                setEditTarget(String(channel.config.email ?? channel.config.chat_id ?? ""));
+                setEditActive(channel.is_active);
+              }}
+            />,
           ])}
         />
       ) : null}
@@ -1150,6 +1414,10 @@ function Clients({ organization }: { organization?: Organization }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [editing, setEditing] = useState<Client | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   const query = useQuery({
     queryKey: ["clients", organization?.public_id],
     queryFn: () => clientService.list(organization!.public_id),
@@ -1166,6 +1434,25 @@ function Clients({ organization }: { organization?: Organization }) {
       setName("");
       setEmail("");
       setNotes("");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+  const update = useMutation({
+    mutationFn: () =>
+      clientService.update(organization!.public_id, editing!.public_id, {
+        name: editName,
+        contact_email: editEmail || null,
+        notes: editNotes || null,
+      }),
+    onSuccess: () => {
+      setEditing(null);
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (clientId: string) => clientService.remove(organization!.public_id, clientId),
+    onSuccess: () => {
+      setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
   });
@@ -1187,16 +1474,65 @@ function Clients({ organization }: { organization?: Organization }) {
         <button className="button primary">Create</button>
       </form>
       {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
+      {update.isError ? <ErrorBox message={unwrapError(update.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
+      {editing ? (
+        <form
+          className="form-panel inline-form edit-strip"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update.mutate();
+          }}
+        >
+          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input type="email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} />
+          <input value={editNotes} onChange={(event) => setEditNotes(event.target.value)} />
+          <div className="row-actions">
+            <button className="button primary" disabled={update.isPending}>
+              {update.isPending ? "Saving..." : "Save"}
+            </button>
+            <button className="button secondary" type="button" onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
       {query.isLoading ? <TableSkeleton /> : null}
       {!query.isLoading && !clients.length ? <EmptyInline text="No clients yet." /> : null}
       {clients.length ? (
         <DataTable
-          headers={["Name", "Contact", "Notes", "Created"]}
+          headers={["Name", "Contact", "Notes", "Created", ""]}
           rows={clients.map((client) => [
             client.name,
             client.contact_email ?? "No contact",
             client.notes ?? "",
             formatDate(client.created_at),
+            <div className="row-actions">
+              <button
+                className="icon-button"
+                title="Edit client"
+                onClick={() => {
+                  setEditing(client);
+                  setEditName(client.name);
+                  setEditEmail(client.contact_email ?? "");
+                  setEditNotes(client.notes ?? "");
+                }}
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                className="icon-button"
+                title="Delete client"
+                disabled={remove.isPending}
+                onClick={() => {
+                  if (confirm(`Delete client "${client.name}"?`)) {
+                    remove.mutate(client.public_id);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>,
           ])}
         />
       ) : null}
@@ -1208,7 +1544,10 @@ function StatusPages({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [monitorId, setMonitorId] = useState("");
+  const [editing, setEditing] = useState<StatusPage | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editSlug, setEditSlug] = useState("");
+  const [editActive, setEditActive] = useState(true);
   const pages = useQuery({
     queryKey: ["status-pages", organization?.public_id],
     queryFn: () => statusPageService.list(organization!.public_id),
@@ -1233,17 +1572,21 @@ function StatusPages({ organization }: { organization?: Organization }) {
       queryClient.invalidateQueries({ queryKey: ["status-pages"] });
     },
   });
-  const addService = useMutation({
-    mutationFn: (statusPageId: string) =>
-      statusPageService.addService(statusPageId, {
-        monitor_id: monitorId,
-        display_name:
-          monitors.data?.monitors.find((monitor) => monitor.public_id === monitorId)?.name ?? "Service",
+  const update = useMutation({
+    mutationFn: () =>
+      statusPageService.update(editing!.public_id, {
+        name: editName,
+        slug: editSlug,
+        is_active: editActive,
       }),
     onSuccess: () => {
-      setMonitorId("");
+      setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["status-pages"] });
     },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => statusPageService.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["status-pages"] }),
   });
   const statusPages = pages.data?.status_pages ?? [];
 
@@ -1267,36 +1610,181 @@ function StatusPages({ organization }: { organization?: Organization }) {
           required
         />
         <input placeholder="slug" value={slug} onChange={(event) => setSlug(slugify(event.target.value))} required />
-        <select value={monitorId} onChange={(event) => setMonitorId(event.target.value)}>
-          <option value="">Select service later</option>
-          {(monitors.data?.monitors ?? []).map((monitor) => (
+        <button className="button primary">Create</button>
+      </form>
+      {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
+      {update.isError ? <ErrorBox message={unwrapError(update.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
+      {editing ? (
+        <form
+          className="form-panel inline-form edit-strip"
+          onSubmit={(event) => {
+            event.preventDefault();
+            update.mutate();
+          }}
+        >
+          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input value={editSlug} onChange={(event) => setEditSlug(slugify(event.target.value))} required />
+          <label className="check-label">
+            <input type="checkbox" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
+            Active
+          </label>
+          <div className="row-actions">
+            <button className="button primary" disabled={update.isPending}>
+              {update.isPending ? "Saving..." : "Save"}
+            </button>
+            <button className="button secondary" type="button" onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {pages.isLoading ? <TableSkeleton /> : null}
+      {!pages.isLoading && !statusPages.length ? <EmptyInline text="No status pages yet." /> : null}
+      {statusPages.length ? (
+        <>
+          <DataTable
+            headers={["Name", "Slug", "Status", "Public URL", ""]}
+            rows={statusPages.map((page) => {
+              const publicPath = `/status/${page.slug}`;
+              const publicUrl = `${location.origin}${publicPath}`;
+              return [
+                page.name,
+                page.slug,
+                page.is_active ? <span className="status ok">ACTIVE</span> : <span className="status muted">OFF</span>,
+                <Link className="truncate-link" to={publicPath}>{publicPath}</Link>,
+                <div className="row-actions">
+                  <button
+                    className="icon-button"
+                    title="Copy public link"
+                    onClick={() => navigator.clipboard.writeText(publicUrl)}
+                  >
+                    <Copy size={16} />
+                  </button>
+                  <Link className="icon-button" title="Open public page" to={publicPath} target="_blank">
+                    <ExternalLink size={16} />
+                  </Link>
+                  <button
+                    className="icon-button"
+                    title="Edit status page"
+                    onClick={() => {
+                      setEditing(page);
+                      setEditName(page.name);
+                      setEditSlug(page.slug);
+                      setEditActive(page.is_active);
+                    }}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    title="Delete status page"
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (confirm(`Delete status page "${page.name}"?`)) {
+                        remove.mutate(page.public_id);
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>,
+              ];
+            })}
+          />
+          <div className="management-grid">
+            {statusPages.map((page) => (
+              <StatusPageServices
+                key={page.public_id}
+                page={page}
+                monitors={monitors.data?.monitors ?? []}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Monitor[] }) {
+  const queryClient = useQueryClient();
+  const [monitorId, setMonitorId] = useState("");
+  const services = useQuery({
+    queryKey: ["status-page-services", page.public_id],
+    queryFn: () => statusPageService.services(page.public_id),
+  });
+  const addService = useMutation({
+    mutationFn: () =>
+      statusPageService.addService(page.public_id, {
+        monitor_id: monitorId,
+        display_name: monitors.find((monitor) => monitor.public_id === monitorId)?.name ?? "Service",
+      }),
+    onSuccess: () => {
+      setMonitorId("");
+      queryClient.invalidateQueries({ queryKey: ["status-page-services", page.public_id] });
+      queryClient.invalidateQueries({ queryKey: ["public-status-page", page.slug] });
+    },
+  });
+  const removeService = useMutation({
+    mutationFn: (serviceId: string) => statusPageService.removeService(page.public_id, serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["status-page-services", page.public_id] });
+      queryClient.invalidateQueries({ queryKey: ["public-status-page", page.slug] });
+    },
+  });
+  const attached = services.data?.services ?? [];
+
+  return (
+    <section className="panel service-manager">
+      <h2>{page.name}</h2>
+      <form
+        className="inline-controls"
+        onSubmit={(event) => {
+          event.preventDefault();
+          addService.mutate();
+        }}
+      >
+        <select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} required>
+          <option value="">Select monitor</option>
+          {monitors.map((monitor) => (
             <option key={monitor.public_id} value={monitor.public_id}>
               {monitor.name}
             </option>
           ))}
         </select>
-        <button className="button primary">Create</button>
+        <button className="button primary" disabled={!monitorId || addService.isPending}>
+          {addService.isPending ? "Adding..." : "Add service"}
+        </button>
       </form>
-      {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
-      {pages.isLoading ? <TableSkeleton /> : null}
-      {!pages.isLoading && !statusPages.length ? <EmptyInline text="No status pages yet." /> : null}
-      {statusPages.length ? (
-        <DataTable
-          headers={["Name", "Slug", "Status", "Public URL", "Service"]}
-          rows={statusPages.map((page) => [
-            page.name,
-            page.slug,
-            page.is_active ? <span className="status ok">ACTIVE</span> : <span className="status muted">OFF</span>,
-            <Link to={`/status/${page.slug}`}>/status/{page.slug}</Link>,
-            <button
-              className="button compact"
-              disabled={!monitorId || addService.isPending}
-              onClick={() => addService.mutate(page.public_id)}
-            >
-              Add selected
-            </button>,
-          ])}
-        />
+      {services.isLoading ? <div className="skeleton table-skeleton" /> : null}
+      {services.isError ? <ErrorBox message={unwrapError(services.error)} /> : null}
+      {addService.isError ? <ErrorBox message={unwrapError(addService.error)} /> : null}
+      {removeService.isError ? <ErrorBox message={unwrapError(removeService.error)} /> : null}
+      {!services.isLoading && !attached.length ? (
+        <EmptyInline text="No services are attached to this status page." />
+      ) : null}
+      {attached.length ? (
+        <div className="list-stack">
+          {attached.map((service) => (
+            <div className="list-row" key={service.public_id}>
+              <strong>{service.display_name}</strong>
+              <span>{service.is_visible ? "Visible" : "Hidden"}</span>
+              <button
+                className="icon-button"
+                title="Remove service"
+                disabled={removeService.isPending}
+                onClick={() => {
+                  if (confirm(`Remove "${service.display_name}" from ${page.name}?`)) {
+                    removeService.mutate(service.public_id);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
       ) : null}
     </section>
   );
@@ -1491,7 +1979,7 @@ function PublicStatusPage() {
   );
 }
 
-function ChannelActions({ channel }: { channel: NotificationChannel }) {
+function ChannelActions({ channel, onEdit }: { channel: NotificationChannel; onEdit: () => void }) {
   const queryClient = useQueryClient();
   const test = useMutation({ mutationFn: () => alertChannelService.test(channel.id) });
   const remove = useMutation({
@@ -1503,7 +1991,19 @@ function ChannelActions({ channel }: { channel: NotificationChannel }) {
       <button className="icon-button" title="Send test alert" onClick={() => test.mutate()}>
         <Bell size={16} />
       </button>
-      <button className="icon-button" title="Delete channel" onClick={() => remove.mutate()}>
+      <button className="icon-button" title="Edit channel" onClick={onEdit}>
+        <Pencil size={16} />
+      </button>
+      <button
+        className="icon-button"
+        title="Delete channel"
+        disabled={remove.isPending}
+        onClick={() => {
+          if (confirm(`Delete alert channel "${channel.name}"?`)) {
+            remove.mutate();
+          }
+        }}
+      >
         <Trash2 size={16} />
       </button>
     </div>
@@ -1562,26 +2062,46 @@ function Metric({
 
 function DataTable({ headers, rows }: { headers: string[]; rows: React.ReactNode[][] }) {
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {headers.map((header) => (
-              <th key={header}>{header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex}>{cell}</td>
+    <>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {headers.map((header) => (
+                <th key={header}>{header}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex}>
+                    <span className="cell-value">{cell}</span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mobile-card-list">
+        {rows.map((row, index) => (
+          <section className="mobile-card" key={index}>
+            {row.map((cell, cellIndex) => {
+              const header = headers[cellIndex];
+              const isActions = !header;
+              return (
+                <div className={isActions ? "mobile-card-actions" : "mobile-card-row"} key={cellIndex}>
+                  {isActions ? null : <span>{header}</span>}
+                  <strong>{cell}</strong>
+                </div>
+              );
+            })}
+          </section>
+        ))}
+      </div>
+    </>
   );
 }
 

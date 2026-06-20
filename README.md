@@ -32,6 +32,10 @@ Apply migrations:
 python -m alembic upgrade head
 ```
 
+Alembic is the schema bootstrap path for every environment. A fresh PostgreSQL
+database must be fully created by `python -m alembic upgrade head`; production
+does not rely on `Base.metadata.create_all()`.
+
 Start the API:
 
 ```powershell
@@ -81,6 +85,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/monitoring
 API_HOST=0.0.0.0
 API_PORT=8000
 ENVIRONMENT=development
+AUTO_CREATE_TABLES=false
 JWT_SECRET_KEY=change-this-to-a-long-random-secret
 
 CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","http://localhost:8000","http://127.0.0.1:8000"]
@@ -117,6 +122,14 @@ Production auth note:
 
 - `ENVIRONMENT=production` refuses the default development `JWT_SECRET_KEY`.
 - Use a long random secret before deploying.
+- Keep `AUTO_CREATE_TABLES=false` in production. Run `python -m alembic upgrade head`
+  during deployment before starting or restarting the API.
+
+Development database note:
+
+- Local development should also use `python -m alembic upgrade head`.
+- `AUTO_CREATE_TABLES=true` is only a temporary local convenience for throwaway
+  databases; do not use it for production or shared environments.
 
 ## Main User Flow
 
@@ -284,6 +297,27 @@ Frontend public route:
 /status/:slug
 ```
 
+## Heartbeats
+
+The primary WATCHDOG heartbeat product path is a heartbeat-type monitor:
+
+```json
+{
+  "organization_id": "ORG_PUBLIC_ID",
+  "name": "Nightly backup",
+  "monitor_type": "HEARTBEAT",
+  "interval_seconds": 3600
+}
+```
+
+The create response includes `heartbeat_url`, which should be called by the job
+or worker being monitored. Missed heartbeat detection, incidents, alerting, and
+status pages are all driven by these `Monitor` records.
+
+The older `/api/v1/heartbeats` standalone API is deprecated and retained only
+for legacy clients. Standalone heartbeat rows do not create incidents, send
+alerts, or appear on status pages.
+
 ## Telegram Integration
 
 Telegram uses webhook mode.
@@ -344,6 +378,17 @@ Frontend build:
 cd frontend
 npm run build
 ```
+
+Fresh PostgreSQL migration verification:
+
+```powershell
+$env:WATCHDOG_MIGRATION_TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/watchdog_migration_test"
+python scripts/verify_fresh_migrations.py
+```
+
+The script drops and recreates the `public` schema in the configured database,
+then runs `alembic upgrade head`. Use only a disposable database. The equivalent
+pytest test is skipped unless `WATCHDOG_MIGRATION_TEST_DATABASE_URL` is set.
 
 ## Project Structure
 

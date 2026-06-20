@@ -14,6 +14,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Database
@@ -41,7 +42,11 @@ class Settings(BaseSettings):
     max_auth_attempts_per_window: int = Field(default=5)
     auth_rate_limit_window_seconds: int = Field(default=300)
     max_verification_attempts: int = Field(default=5)
-    environment: str = Field(default="development")
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV"),
+    )
+    auto_create_tables: bool = Field(default=False)
 
     # Monitoring
     default_check_interval: int = Field(default=60, ge=10)
