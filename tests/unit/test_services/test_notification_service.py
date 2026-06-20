@@ -277,6 +277,7 @@ def test_create_email_sender_uses_implicit_ssl_for_port_465() -> None:
     assert sender.use_tls is True
     assert sender.to_emails == ["recipient@example.com"]
     assert sender.from_email == "michael@clevermike.studio"
+    assert sender.from_name == "Michael from Watchdog"
 
 
 @pytest.mark.unit

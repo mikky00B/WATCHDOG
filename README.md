@@ -103,6 +103,7 @@ SMTP_PORT=465
 SMTP_USER=michael@example.com
 SMTP_PASSWORD="your-mailbox-or-app-password"
 FROM_EMAIL=michael@example.com
+FROM_NAME="Michael from Watchdog"
 
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret

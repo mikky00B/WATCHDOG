@@ -98,7 +98,7 @@ async def test_verification_email_sends_smtp_message(monkeypatch: pytest.MonkeyP
     assert connections[0].started_tls is True
     assert connections[0].login_args == ("sender@example.com", "secret")
     assert sent_messages[0]["To"] == "user@example.com"
-    assert sent_messages[0]["From"] == "sender@example.com"
+    assert sent_messages[0]["From"] == "Michael from Watchdog <sender@example.com>"
     assert sent_messages[0]["Subject"] == "Verify your WATCHDOG email"
 
 
