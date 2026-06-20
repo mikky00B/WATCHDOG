@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -61,6 +61,19 @@ import type {
 } from "../types";
 
 type AuthMutationResponse = AuthResponse | RegisterResponse;
+type ToastTone = "success" | "info" | "error";
+type ToastMessage = {
+  id: number;
+  tone: ToastTone;
+  message: string;
+};
+type Notify = (message: string, tone?: ToastTone) => void;
+
+const NotificationContext = createContext<Notify>(() => undefined);
+
+function useNotify() {
+  return useContext(NotificationContext);
+}
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "Not yet";
@@ -199,13 +212,21 @@ function LandingPage() {
 
 function AuthPage({ mode }: { mode: "login" | "register" }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeNotice =
+    typeof (location.state as { notice?: unknown } | null)?.notice === "string"
+      ? String((location.state as { notice: string }).notice)
+      : "";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(routeNotice);
   const queryClient = useQueryClient();
+  useEffect(() => {
+    setNotice(routeNotice);
+  }, [routeNotice]);
   const mutation = useMutation<AuthMutationResponse>({
     mutationFn: async () =>
       mode === "login"
@@ -226,7 +247,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
   const verifyMutation = useMutation({
     mutationFn: () => authService.verifyEmail({ email: verificationEmail, code: verificationCode }),
     onSuccess: () => {
-      navigate("/login");
+      navigate("/login", { state: { notice: "Email verified. You can log in now." } });
     },
   });
   const resendMutation = useMutation({
@@ -252,7 +273,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
           }}
         >
           <h1>Verify email</h1>
-          {notice ? <p>{notice}</p> : null}
+          {notice ? <p className="notice-text">{notice}</p> : null}
           <label>
             Email
             <input value={verificationEmail} readOnly />
@@ -301,6 +322,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
         }}
       >
         <h1>{mode === "login" ? "Log in" : "Create account"}</h1>
+        {notice ? <p className="notice-text">{notice}</p> : null}
         {mode === "register" ? (
           <label>
             Full name
@@ -340,13 +362,17 @@ function PasswordResetPage() {
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  const [notice, setNotice] = useState("");
   const requestMutation = useMutation({
     mutationFn: () => authService.forgotPassword({ email }),
-    onSuccess: () => setCodeSent(true),
+    onSuccess: (data) => {
+      setCodeSent(true);
+      setNotice(data.message);
+    },
   });
   const resetMutation = useMutation({
     mutationFn: () => authService.resetPassword({ email, code, new_password: newPassword }),
-    onSuccess: () => navigate("/login"),
+    onSuccess: () => navigate("/login", { state: { notice: "Password reset. Log in with your new password." } }),
   });
 
   return (
@@ -367,6 +393,7 @@ function PasswordResetPage() {
         }}
       >
         <h1>Reset password</h1>
+        {notice ? <p className="notice-text">{notice}</p> : null}
         <label>
           Email
           <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -423,6 +450,14 @@ function Shell() {
   const { organizations, selected } = useOrganizations();
   const [isMobileNavOpen, setMobileNavOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const notify = useCallback<Notify>((message, tone = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [...current, { id, tone, message }].slice(-3));
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 4200);
+  }, []);
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
@@ -450,121 +485,125 @@ function Shell() {
   }
 
   return (
-    <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
-      <button
-        className="nav-backdrop"
-        aria-label="Close navigation"
-        onClick={() => setMobileNavOpen(false)}
-      />
-      <aside className="sidebar" aria-label="Primary navigation">
-        <div className="sidebar-head">
-          <Link className="brand" to="/app">
-            <ShieldAlert size={24} />
-            WATCHDOG
-          </Link>
-          <button
-            className="icon-button sidebar-close"
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <nav className="side-nav">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              className={
-                item.to === "/app"
-                  ? location.pathname === item.to
-                    ? "active"
-                    : undefined
-                  : location.pathname.startsWith(item.to)
-                    ? "active"
-                    : undefined
-              }
-              to={item.to}
-            >
-              <item.icon size={18} />
-              {item.label}
+    <NotificationContext.Provider value={notify}>
+      <div className={isMobileNavOpen ? "app-shell nav-open" : "app-shell"}>
+        <button
+          className="nav-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setMobileNavOpen(false)}
+        />
+        <aside className="sidebar" aria-label="Primary navigation">
+          <div className="sidebar-head">
+            <Link className="brand" to="/app">
+              <ShieldAlert size={24} />
+              WATCHDOG
             </Link>
-          ))}
-        </nav>
-      </aside>
-      <div className="workspace">
-        <header className="workspace-header">
-          <button
-            className="icon-button mobile-menu-button"
-            type="button"
-            aria-label="Open navigation"
-            onClick={() => setMobileNavOpen(true)}
-          >
-            <Menu size={19} />
-          </button>
-          <div className="workspace-selector">
-            <span className="eyebrow">Workspace</span>
-            <select
-              value={selected?.public_id ?? ""}
-              onChange={(event) => {
-                localStorage.setItem("watchdog_organization_public_id", event.target.value);
-                queryClient.invalidateQueries();
-              }}
+            <button
+              className="icon-button sidebar-close"
+              type="button"
+              aria-label="Close navigation"
+              onClick={() => setMobileNavOpen(false)}
             >
-              {organizations.map((organization) => (
-                <option key={organization.public_id} value={organization.public_id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
+              <X size={18} />
+            </button>
           </div>
-          <div className="header-actions">
-            <Link className="button secondary" to="/app/organizations/new">
-              <Building2 size={16} />
-              Organization
-            </Link>
-            <div className="account-menu">
-              <button
-                className="account-button"
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={isAccountMenuOpen}
-                onClick={() => setAccountMenuOpen((open) => !open)}
+          <nav className="side-nav">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                className={
+                  item.to === "/app"
+                    ? location.pathname === item.to
+                      ? "active"
+                      : undefined
+                    : location.pathname.startsWith(item.to)
+                      ? "active"
+                      : undefined
+                }
+                to={item.to}
               >
-                <UserCircle size={18} />
-                <span>{user?.full_name ?? "Account"}</span>
-                <ChevronDown size={15} />
-              </button>
-              {isAccountMenuOpen ? (
-                <div className="account-popover" role="menu">
-                  <strong>{user?.full_name ?? "Account"}</strong>
-                  <button type="button" role="menuitem" onClick={logout}>
-                    <LogOut size={16} />
-                    Log out
-                  </button>
-                </div>
-              ) : null}
+                <item.icon size={18} />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </aside>
+        <div className="workspace">
+          <header className="workspace-header">
+            <button
+              className="icon-button mobile-menu-button"
+              type="button"
+              aria-label="Open navigation"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu size={19} />
+            </button>
+            <div className="workspace-selector">
+              <span className="eyebrow">Workspace</span>
+              <select
+                value={selected?.public_id ?? ""}
+                onChange={(event) => {
+                  localStorage.setItem("watchdog_organization_public_id", event.target.value);
+                  queryClient.invalidateQueries();
+                  notify("Workspace switched.", "info");
+                }}
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.public_id} value={organization.public_id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
-        </header>
-        <main className="content">
-          <Routes>
-            <Route path="/" element={selected ? <Overview organization={selected} /> : <EmptyOrganizations />} />
-            <Route path="/organizations/new" element={<CreateOrganization />} />
-            <Route path="/monitors" element={<MonitorList organization={selected} />} />
-            <Route path="/monitors/new" element={<CreateMonitor organization={selected} />} />
-            <Route path="/monitors/:monitorId" element={<MonitorDetail />} />
-            <Route path="/alerts" element={<Alerts organization={selected} />} />
-            <Route path="/incidents" element={<IncidentList organization={selected} />} />
-            <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
-            <Route path="/clients" element={<Clients organization={selected} />} />
-            <Route path="/alert-channels" element={<AlertChannels organization={selected} />} />
-            <Route path="/status-pages" element={<StatusPages organization={selected} />} />
-            <Route path="/reports" element={<Reports organization={selected} />} />
-          </Routes>
-        </main>
+            <div className="header-actions">
+              <Link className="button secondary" to="/app/organizations/new">
+                <Building2 size={16} />
+                Organization
+              </Link>
+              <div className="account-menu">
+                <button
+                  className="account-button"
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountMenuOpen}
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                >
+                  <UserCircle size={18} />
+                  <span>{user?.full_name ?? "Account"}</span>
+                  <ChevronDown size={15} />
+                </button>
+                {isAccountMenuOpen ? (
+                  <div className="account-popover" role="menu">
+                    <strong>{user?.full_name ?? "Account"}</strong>
+                    <button type="button" role="menuitem" onClick={logout}>
+                      <LogOut size={16} />
+                      Log out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </header>
+          <main className="content">
+            <Routes>
+              <Route path="/" element={selected ? <Overview organization={selected} /> : <EmptyOrganizations />} />
+              <Route path="/organizations/new" element={<CreateOrganization />} />
+              <Route path="/monitors" element={<MonitorList organization={selected} />} />
+              <Route path="/monitors/new" element={<CreateMonitor organization={selected} />} />
+              <Route path="/monitors/:monitorId" element={<MonitorDetail />} />
+              <Route path="/alerts" element={<Alerts organization={selected} />} />
+              <Route path="/incidents" element={<IncidentList organization={selected} />} />
+              <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
+              <Route path="/clients" element={<Clients organization={selected} />} />
+              <Route path="/alert-channels" element={<AlertChannels organization={selected} />} />
+              <Route path="/status-pages" element={<StatusPages organization={selected} />} />
+              <Route path="/reports" element={<Reports organization={selected} />} />
+            </Routes>
+          </main>
+        </div>
+        <ToastStack toasts={toasts} dismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
       </div>
-    </div>
+    </NotificationContext.Provider>
   );
 }
 
@@ -584,6 +623,7 @@ function EmptyOrganizations() {
 function CreateOrganization() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const mutation = useMutation({
@@ -591,6 +631,7 @@ function CreateOrganization() {
     onSuccess: (organization) => {
       localStorage.setItem("watchdog_organization_public_id", organization.public_id);
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      notify(`${organization.name} created.`);
       navigate("/app");
     },
   });
@@ -708,6 +749,7 @@ function Overview({ organization }: { organization: Organization }) {
 
 function MonitorList({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   if (!organization) {
     return <EmptyOrganizations />;
   }
@@ -718,7 +760,11 @@ function MonitorList({ organization }: { organization?: Organization }) {
   });
   const remove = useMutation({
     mutationFn: (id: string) => monitorService.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["monitors"] }),
+    onSuccess: (_data, id) => {
+      const monitor = monitors.find((item) => item.public_id === id);
+      queryClient.invalidateQueries({ queryKey: ["monitors"] });
+      notify(`${monitor?.name ?? "Monitor"} deleted.`);
+    },
   });
   const monitors = query.data?.monitors ?? [];
 
@@ -770,6 +816,7 @@ function MonitorList({ organization }: { organization?: Organization }) {
 function CreateMonitor({ organization }: { organization?: Organization }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [type, setType] = useState<MonitorType>("WEBSITE");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -811,7 +858,10 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
       setCreated(monitor);
       queryClient.invalidateQueries({ queryKey: ["monitors", organization?.public_id] });
       if (monitor.monitor_type !== "HEARTBEAT") {
+        notify(`${monitor.name} created.`);
         navigate("/app/monitors");
+      } else {
+        notify(`${monitor.name} created. Copy the heartbeat URL to start reporting.`);
       }
     },
   });
@@ -919,9 +969,10 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
           <code>{`${location.origin.replace("5173", "8000")}${created.heartbeat_url}`}</code>
           <button
             className="button secondary"
-            onClick={() =>
-              navigator.clipboard.writeText(`${location.origin.replace("5173", "8000")}${created.heartbeat_url}`)
-            }
+            onClick={() => {
+              navigator.clipboard.writeText(`${location.origin.replace("5173", "8000")}${created.heartbeat_url}`);
+              notify("Heartbeat URL copied.");
+            }}
           >
             <Copy size={16} />
             Copy
@@ -936,6 +987,7 @@ function MonitorDetail() {
   const { monitorId = "" } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const query = useQuery({
     queryKey: ["monitor", monitorId],
     queryFn: () => monitorService.get(monitorId),
@@ -956,15 +1008,24 @@ function MonitorDetail() {
   };
   const pause = useMutation({
     mutationFn: () => monitorService.pause(monitorId),
-    onSuccess: refreshMonitor,
+    onSuccess: (updated) => {
+      refreshMonitor();
+      notify(`${updated.name} paused.`);
+    },
   });
   const resume = useMutation({
     mutationFn: () => monitorService.resume(monitorId),
-    onSuccess: refreshMonitor,
+    onSuccess: (updated) => {
+      refreshMonitor();
+      notify(`${updated.name} resumed.`);
+    },
   });
   const runCheck = useMutation({
     mutationFn: () => monitorService.runCheck(monitorId),
-    onSuccess: refreshMonitor,
+    onSuccess: (result) => {
+      refreshMonitor();
+      notify(result.success ? "Check completed successfully." : "Check completed with a failure.", result.success ? "success" : "info");
+    },
   });
   const monitor = query.data;
   const [editName, setEditName] = useState("");
@@ -991,11 +1052,15 @@ function MonitorDetail() {
         expected_status_code: editExpectedStatus === "" ? null : editExpectedStatus,
         response_time_threshold_ms: editThreshold === "" ? null : editThreshold,
       }),
-    onSuccess: refreshMonitor,
+    onSuccess: (updated) => {
+      refreshMonitor();
+      notify(`${updated.name} updated.`);
+    },
   });
   const remove = useMutation({
     mutationFn: () => monitorService.remove(monitorId),
     onSuccess: () => {
+      notify(`${monitor?.name ?? "Monitor"} deleted.`);
       queryClient.invalidateQueries({ queryKey: ["monitors"] });
       navigate("/app/monitors");
     },
@@ -1155,6 +1220,7 @@ function MonitorDetail() {
 
 function Alerts({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const query = useQuery({
     queryKey: ["alerts", organization?.public_id],
     queryFn: () => alertService.list(organization?.public_id),
@@ -1162,11 +1228,17 @@ function Alerts({ organization }: { organization?: Organization }) {
   });
   const acknowledge = useMutation({
     mutationFn: (id: number) => alertService.acknowledge(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+    onSuccess: (alert) => {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      notify(`${alert.title} acknowledged.`);
+    },
   });
   const resolve = useMutation({
     mutationFn: (id: number) => alertService.resolve(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+    onSuccess: (alert) => {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      notify(`${alert.title} resolved.`);
+    },
   });
   const alerts = query.data?.alerts ?? [];
 
@@ -1252,17 +1324,26 @@ function IncidentList({ organization }: { organization?: Organization }) {
 function IncidentDetail() {
   const { incidentId = "" } = useParams();
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const query = useQuery({
     queryKey: ["incident", incidentId],
     queryFn: () => incidentService.get(incidentId),
   });
   const acknowledge = useMutation({
     mutationFn: () => incidentService.acknowledge(incidentId, "Acknowledged from dashboard"),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incident", incidentId] }),
+    onSuccess: (incident) => {
+      queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      notify(`${incident.title} acknowledged.`);
+    },
   });
   const resolve = useMutation({
     mutationFn: () => incidentService.resolve(incidentId, "Resolved from dashboard"),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incident", incidentId] }),
+    onSuccess: (incident) => {
+      queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      notify(`${incident.title} resolved.`);
+    },
   });
   const incident = query.data;
 
@@ -1273,13 +1354,15 @@ function IncidentDetail() {
       {incident ? (
         <>
           <PageHeader title={incident.title} description={incident.reason}>
-            <button className="button secondary" onClick={() => acknowledge.mutate()}>
+            <button className="button secondary" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate()}>
               Acknowledge
             </button>
-            <button className="button primary" onClick={() => resolve.mutate()}>
+            <button className="button primary" disabled={resolve.isPending} onClick={() => resolve.mutate()}>
               Resolve
             </button>
           </PageHeader>
+          {acknowledge.isError ? <ErrorBox message={unwrapError(acknowledge.error)} /> : null}
+          {resolve.isError ? <ErrorBox message={unwrapError(resolve.error)} /> : null}
           <div className="metric-grid">
             <Metric label="Status" value={incident.status} icon={AlertTriangle} />
             <Metric label="Severity" value={incident.severity} icon={Gauge} />
@@ -1294,6 +1377,7 @@ function IncidentDetail() {
 
 function AlertChannels({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const query = useQuery({
     queryKey: ["alert-channels", organization?.id],
     queryFn: () => alertChannelService.list(organization?.id),
@@ -1318,6 +1402,7 @@ function AlertChannels({ organization }: { organization?: Organization }) {
       setName("");
       setTarget("");
       queryClient.invalidateQueries({ queryKey: ["alert-channels"] });
+      notify("Alert channel created.");
     },
   });
   const update = useMutation({
@@ -1330,6 +1415,7 @@ function AlertChannels({ organization }: { organization?: Organization }) {
     onSuccess: () => {
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["alert-channels"] });
+      notify("Alert channel updated.");
     },
   });
   const channels = query.data?.channels ?? [];
@@ -1411,6 +1497,7 @@ function AlertChannels({ organization }: { organization?: Organization }) {
 
 function Clients({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
@@ -1435,6 +1522,7 @@ function Clients({ organization }: { organization?: Organization }) {
       setEmail("");
       setNotes("");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      notify("Client created.");
     },
   });
   const update = useMutation({
@@ -1447,6 +1535,7 @@ function Clients({ organization }: { organization?: Organization }) {
     onSuccess: () => {
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      notify("Client updated.");
     },
   });
   const remove = useMutation({
@@ -1454,6 +1543,7 @@ function Clients({ organization }: { organization?: Organization }) {
     onSuccess: () => {
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      notify("Client deleted.");
     },
   });
   const clients = query.data?.clients ?? [];
@@ -1542,6 +1632,7 @@ function Clients({ organization }: { organization?: Organization }) {
 
 function StatusPages({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [editing, setEditing] = useState<StatusPage | null>(null);
@@ -1570,6 +1661,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
       setName("");
       setSlug("");
       queryClient.invalidateQueries({ queryKey: ["status-pages"] });
+      notify("Status page created.");
     },
   });
   const update = useMutation({
@@ -1582,11 +1674,15 @@ function StatusPages({ organization }: { organization?: Organization }) {
     onSuccess: () => {
       setEditing(null);
       queryClient.invalidateQueries({ queryKey: ["status-pages"] });
+      notify("Status page updated.");
     },
   });
   const remove = useMutation({
     mutationFn: (id: string) => statusPageService.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["status-pages"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["status-pages"] });
+      notify("Status page deleted.");
+    },
   });
   const statusPages = pages.data?.status_pages ?? [];
 
@@ -1657,7 +1753,10 @@ function StatusPages({ organization }: { organization?: Organization }) {
                   <button
                     className="icon-button"
                     title="Copy public link"
-                    onClick={() => navigator.clipboard.writeText(publicUrl)}
+                    onClick={() => {
+                      navigator.clipboard.writeText(publicUrl);
+                      notify("Public status link copied.");
+                    }}
                   >
                     <Copy size={16} />
                   </button>
@@ -1709,6 +1808,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
 
 function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Monitor[] }) {
   const queryClient = useQueryClient();
+  const notify = useNotify();
   const [monitorId, setMonitorId] = useState("");
   const services = useQuery({
     queryKey: ["status-page-services", page.public_id],
@@ -1724,6 +1824,7 @@ function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Mo
       setMonitorId("");
       queryClient.invalidateQueries({ queryKey: ["status-page-services", page.public_id] });
       queryClient.invalidateQueries({ queryKey: ["public-status-page", page.slug] });
+      notify(`Service added to ${page.name}.`);
     },
   });
   const removeService = useMutation({
@@ -1731,6 +1832,7 @@ function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Mo
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["status-page-services", page.public_id] });
       queryClient.invalidateQueries({ queryKey: ["public-status-page", page.slug] });
+      notify(`Service removed from ${page.name}.`);
     },
   });
   const attached = services.data?.services ?? [];
@@ -1981,14 +2083,21 @@ function PublicStatusPage() {
 
 function ChannelActions({ channel, onEdit }: { channel: NotificationChannel; onEdit: () => void }) {
   const queryClient = useQueryClient();
-  const test = useMutation({ mutationFn: () => alertChannelService.test(channel.id) });
+  const notify = useNotify();
+  const test = useMutation({
+    mutationFn: () => alertChannelService.test(channel.id),
+    onSuccess: () => notify(`Test alert queued for ${channel.name}.`),
+  });
   const remove = useMutation({
     mutationFn: () => alertChannelService.remove(channel.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alert-channels"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alert-channels"] });
+      notify(`${channel.name} deleted.`);
+    },
   });
   return (
     <div className="row-actions">
-      <button className="icon-button" title="Send test alert" onClick={() => test.mutate()}>
+      <button className="icon-button" title="Send test alert" disabled={test.isPending} onClick={() => test.mutate()}>
         <Bell size={16} />
       </button>
       <button className="icon-button" title="Edit channel" onClick={onEdit}>
@@ -2102,6 +2211,33 @@ function DataTable({ headers, rows }: { headers: string[]; rows: React.ReactNode
         ))}
       </div>
     </>
+  );
+}
+
+function ToastStack({
+  toasts,
+  dismiss,
+}: {
+  toasts: ToastMessage[];
+  dismiss: (id: number) => void;
+}) {
+  if (!toasts.length) return null;
+  return (
+    <div className="toast-stack" role="status" aria-live="polite">
+      {toasts.map((toast) => (
+        <button
+          key={toast.id}
+          className={`toast ${toast.tone}`}
+          type="button"
+          onClick={() => dismiss(toast.id)}
+          title="Dismiss message"
+        >
+          {toast.tone === "success" ? <CheckCircle2 size={18} /> : <Bell size={18} />}
+          <span>{toast.message}</span>
+          <X size={15} />
+        </button>
+      ))}
+    </div>
   );
 }
 
