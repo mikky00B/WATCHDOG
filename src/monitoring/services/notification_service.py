@@ -220,14 +220,9 @@ EmailSenderFactory = Callable[[Settings, str], AlertChannel]
 
 def create_email_sender(settings: Settings, recipient: str) -> EmailAlertChannel:
     return EmailAlertChannel(
-        smtp_host=settings.smtp_host or "",
-        smtp_port=settings.smtp_port,
-        smtp_user=settings.smtp_user or "",
-        smtp_password=settings.smtp_password or "",
-        from_email=str(settings.from_email or settings.smtp_user or ""),
+        resend_api_key=settings.resend_api_key or "",
+        from_email=str(settings.from_email or ""),
         to_emails=[recipient],
-        use_tls=settings.smtp_use_tls,
-        use_ssl=bool(settings.smtp_use_ssl),
         from_name=settings.from_name,
     )
 

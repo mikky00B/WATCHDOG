@@ -56,22 +56,14 @@ class Settings(BaseSettings):
     max_check_retries: int = 2
     run_scheduler_in_api: bool = Field(default=True)
 
-    # Alerting - SMTP
+    # Alerting - Email
     email_enabled: bool = False
-    smtp_host: str | None = Field(default=None)
-    smtp_port: int = Field(default=587)
-    smtp_user: str | None = Field(default=None)
-    smtp_password: str | None = Field(default=None)
-    smtp_use_tls: bool = Field(default=True)
-    smtp_use_ssl: bool | None = Field(default=None)
-    from_email: EmailStr | None = Field(
+    resend_api_key: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("FROM_EMAIL", "SMTP_FROM_EMAIL"),
+        validation_alias=AliasChoices("RESENT_API_KEY", "RESEND_API_KEY"),
     )
-    from_name: str = Field(
-        default="Michael from Watchdog",
-        validation_alias=AliasChoices("FROM_NAME", "SMTP_FROM_NAME"),
-    )
+    from_email: EmailStr | None = Field(default=None)
+    from_name: str = Field(default="Michael from Watchdog")
 
     contact_email: EmailStr = Field(default="alerts@example.com")
 
@@ -82,14 +74,7 @@ class Settings(BaseSettings):
             and self.jwt_secret_key == "dev-only-change-this-secret"
         ):
             raise ValueError("JWT_SECRET_KEY must be set to a strong secret in production")
-        if self.from_email is None and self.smtp_user:
-            self.from_email = self.smtp_user
-        if self.smtp_use_ssl is None:
-            self.smtp_use_ssl = self.smtp_port == 465
         return self
-
-    # Alerting - Slack
-    slack_webhook_url: str | None = Field(default=None)
 
     # Alerting - Telegram
     telegram_bot_token: str | None = Field(default=None)

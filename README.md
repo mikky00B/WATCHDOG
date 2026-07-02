@@ -98,10 +98,7 @@ MAX_CHECK_RETRIES=2
 RUN_SCHEDULER_IN_API=true
 
 EMAIL_ENABLED=true
-SMTP_HOST=smtp.titan.email
-SMTP_PORT=465
-SMTP_USER=michael@example.com
-SMTP_PASSWORD="your-mailbox-or-app-password"
+RESENT_API_KEY=re_your_resend_api_key
 FROM_EMAIL=michael@example.com
 FROM_NAME="Michael from Watchdog"
 
@@ -111,11 +108,11 @@ TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/integrations/telegram/webhoo
 TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
 ```
 
-SMTP notes:
+Email notes:
 
-- Port `465` uses implicit SSL automatically.
-- Port `587` uses STARTTLS.
-- Titan Mail requires third-party email access to be enabled for the mailbox.
+- WATCHDOG sends email through Resend's HTTP API.
+- `RESENT_API_KEY` is supported because it is the current project env name. `RESEND_API_KEY` also works.
+- `FROM_EMAIL` must be a Resend-verified sender/domain.
 - Verification and password-reset emails use a transactional template, not the monitor-alert template.
 - Alert recipients come from Alert Channels, not from `.env`.
 
@@ -143,6 +140,22 @@ Development database note:
 7. Add alert channels for the organization.
 8. Create a status page and add monitor services.
 9. Use Reports to generate monthly reliability summaries.
+
+## Planned Product Additions
+
+Near-term report features:
+
+- Scheduled monthly client report emails
+- Persisted report history
+- PDF report export
+
+Near-term team management features:
+
+- Organization invites
+- Member roles
+- Member removal
+- Organization ownership transfer
+- Audit events
 
 ## Auth Flow
 
@@ -269,7 +282,13 @@ The Reports tab generates server-calculated monthly reliability reports. It incl
 - Incident list
 - Authenticated HTML report view
 
-Reports are generated on demand and are not persisted yet. PDF export and scheduled report emails are not implemented.
+Reports are generated on demand and are not persisted yet.
+
+Planned report additions:
+
+- Persist generated monthly reports
+- Email scheduled monthly client reports
+- Export monthly reports as PDF
 
 JSON report endpoint:
 
@@ -397,7 +416,7 @@ pytest test is skipped unless `WATCHDOG_MIGRATION_TEST_DATABASE_URL` is set.
 monitoring-platform/
 ├── frontend/                # React + Vite dashboard
 ├── src/monitoring/          # FastAPI application package
-│   ├── alerting/            # Email, Telegram, Slack, webhook, transactional email
+│   ├── alerting/            # Email, Telegram, webhook, transactional email
 │   ├── api/v1/              # REST routes
 │   ├── core/                # Password hashing and token helpers
 │   ├── models/              # SQLAlchemy models
@@ -430,9 +449,8 @@ Check:
 Check:
 
 - `EMAIL_ENABLED=true`
-- SMTP credentials are correct
-- Titan third-party email access is enabled if using Titan Mail
-- Port `465` uses SSL/TLS; port `587` uses STARTTLS
+- `RESENT_API_KEY` or `RESEND_API_KEY` is set
+- `FROM_EMAIL` is verified in Resend
 - Restart the backend after changing `.env`
 
 ### Monitor URL is blocked as unsafe

@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
+import httpx
 import structlog
 
 from monitoring.alerting.addressing import DEFAULT_FROM_NAME, format_from_address
@@ -18,27 +14,17 @@ class EmailAlertChannel(AlertChannel):
 
     def __init__(
         self,
-        smtp_host: str,
-        smtp_port: int,
-        smtp_user: str,
-        smtp_password: str,
+        resend_api_key: str,
         from_email: str,
         to_emails: list[str],
-        use_tls: bool = True,
-        use_ssl: bool = False,
         use_html: bool = True,
         from_name: str = DEFAULT_FROM_NAME,
         timeout: int = 30,
     ):
-        self.smtp_host = smtp_host
-        self.smtp_port = smtp_port
-        self.smtp_user = smtp_user
-        self.smtp_password = smtp_password
+        self.resend_api_key = resend_api_key
         self.from_email = from_email
         self.from_name = from_name
         self.to_emails = to_emails
-        self.use_tls = use_tls
-        self.use_ssl = use_ssl
         self.use_html = use_html
         self.timeout = timeout
         self.last_error: str | None = None
@@ -48,15 +34,12 @@ class EmailAlertChannel(AlertChannel):
         self.last_error = None
         if not all(
             [
-                self.smtp_host,
-                self.smtp_port,
-                self.smtp_user,
-                self.smtp_password,
+                self.resend_api_key,
                 self.from_email,
                 self.to_emails,
             ]
         ):
-            self.last_error = "Email SMTP configuration is incomplete"
+            self.last_error = "Resend email configuration is incomplete"
             logger.error("email_missing_required_config")
             return False
 
@@ -248,51 +231,22 @@ This is an automated alert from your monitoring system.
 
         try:
             self.last_error = None
-            # Run synchronous SMTP operations in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._send_sync, payload)
-            return result
-
-        except Exception as exc:
-            logger.error(
-                "email_alert_failed",
-                error=str(exc),
-                exc_info=True,
-            )
-            self.last_error = str(exc)
-            return False
-
-    def _send_sync(self, payload: AlertPayload) -> bool:
-        """
-        Synchronous email sending (called from executor).
-
-        Args:
-            payload: Alert data to send
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["From"] = format_from_address(self.from_email, self.from_name)
-            msg["To"] = ", ".join(self.to_emails)
-            msg["Subject"] = f"[{payload.severity.upper()}] {payload.title}"
-
-            # Create plain text version
-            plain_body = self._create_plain_body(payload)
-            msg.attach(MIMEText(plain_body, "plain"))
-
-            # Create HTML version if enabled
+            message: dict[str, object] = {
+                "from": format_from_address(self.from_email, self.from_name),
+                "to": self.to_emails,
+                "subject": f"[{payload.severity.upper()}] {payload.title}",
+                "text": self._create_plain_body(payload),
+            }
             if self.use_html:
-                html_body = self._create_html_body(payload)
-                msg.attach(MIMEText(html_body, "html"))
+                message["html"] = self._create_html_body(payload)
 
-            smtp_cls = smtplib.SMTP_SSL if self.use_ssl else smtplib.SMTP
-            with smtp_cls(self.smtp_host, self.smtp_port, timeout=self.timeout) as server:
-                if self.use_tls and not self.use_ssl:
-                    server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {self.resend_api_key}"},
+                    json=message,
+                )
+                response.raise_for_status()
 
             logger.info(
                 "email_alert_sent",
@@ -302,60 +256,32 @@ This is an automated alert from your monitoring system.
             )
             return True
 
-        except smtplib.SMTPAuthenticationError as exc:
-            server_error = exc.smtp_error.decode(errors="replace")
-            self.last_error = f"SMTP authentication failed ({exc.smtp_code}): {server_error}"
+        except httpx.HTTPStatusError as exc:
+            self.last_error = f"Resend API error ({exc.response.status_code}): {exc.response.text}"
             logger.error(
-                "email_authentication_failed",
-                smtp_host=self.smtp_host,
-                smtp_user=self.smtp_user,
-                smtp_code=exc.smtp_code,
-                smtp_error=server_error,
+                "resend_email_api_error",
+                status_code=exc.response.status_code,
+                response=exc.response.text,
             )
             return False
-
-        except smtplib.SMTPException as exc:
-            self.last_error = f"SMTP error: {exc}"
-            logger.error(
-                "smtp_error",
-                error=str(exc),
-                smtp_host=self.smtp_host,
-            )
+        except httpx.HTTPError as exc:
+            self.last_error = f"Resend HTTP error: {exc}"
+            logger.error("resend_email_http_error", error=str(exc))
             return False
-
         except Exception as exc:
-            self.last_error = str(exc)
             logger.error(
-                "email_send_failed",
+                "email_alert_failed",
                 error=str(exc),
                 exc_info=True,
             )
+            self.last_error = str(exc)
             return False
 
     async def test_connection(self) -> bool:
         """
-        Test SMTP connection and authentication.
+        Validate Resend email configuration.
 
         Returns:
-            True if connection successful, False otherwise
+            True if configuration is present, False otherwise.
         """
-        try:
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self._test_connection_sync)
-        except Exception as exc:
-            logger.error("email_test_failed", error=str(exc))
-            return False
-
-    def _test_connection_sync(self) -> bool:
-        """Synchronous connection test."""
-        try:
-            smtp_cls = smtplib.SMTP_SSL if self.use_ssl else smtplib.SMTP
-            with smtp_cls(self.smtp_host, self.smtp_port, timeout=self.timeout) as server:
-                if self.use_tls and not self.use_ssl:
-                    server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-            logger.info("email_connection_test_passed")
-            return True
-        except Exception as exc:
-            logger.error("email_connection_test_failed", error=str(exc))
-            return False
+        return self.validate_config()

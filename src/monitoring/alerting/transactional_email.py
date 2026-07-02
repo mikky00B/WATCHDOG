@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import html
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
+import httpx
 import structlog
 
 from monitoring.alerting.addressing import format_from_address
@@ -64,75 +61,48 @@ class TransactionalEmailSender:
         self.last_error = None
         if not all(
             [
-                self.settings.smtp_host,
-                self.settings.smtp_port,
-                self.settings.smtp_user,
-                self.settings.smtp_password,
-                self.settings.from_email or self.settings.smtp_user,
+                self.settings.resend_api_key,
+                self.settings.from_email,
                 to_email,
             ]
         ):
-            self.last_error = "Email SMTP configuration is incomplete"
+            self.last_error = "Resend email configuration is incomplete"
             return False
         return True
 
     async def _send(self, to_email: str, subject: str, plain_body: str, html_body: str) -> bool:
         try:
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None,
-                self._send_sync,
-                to_email,
-                subject,
-                plain_body,
-                html_body,
+            from_email = str(self.settings.from_email or "")
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {self.settings.resend_api_key}"},
+                    json={
+                        "from": format_from_address(from_email, self.settings.from_name),
+                        "to": [to_email],
+                        "subject": subject,
+                        "text": plain_body,
+                        "html": html_body,
+                    },
+                )
+                response.raise_for_status()
+            logger.info("transactional_email_sent", to_email=to_email, subject=subject)
+            return True
+        except httpx.HTTPStatusError as exc:
+            self.last_error = f"Resend API error ({exc.response.status_code}): {exc.response.text}"
+            logger.error(
+                "transactional_email_resend_api_error",
+                status_code=exc.response.status_code,
+                response=exc.response.text,
             )
+            return False
+        except httpx.HTTPError as exc:
+            self.last_error = f"Resend HTTP error: {exc}"
+            logger.error("transactional_email_resend_http_error", error=str(exc))
+            return False
         except Exception as exc:
             self.last_error = str(exc)
             logger.error("transactional_email_failed", error=str(exc), exc_info=True)
-            return False
-
-    def _send_sync(self, to_email: str, subject: str, plain_body: str, html_body: str) -> bool:
-        try:
-            from_email = str(self.settings.from_email or self.settings.smtp_user or "")
-            message = MIMEMultipart("alternative")
-            message["From"] = format_from_address(from_email, self.settings.from_name)
-            message["To"] = to_email
-            message["Subject"] = subject
-            message.attach(MIMEText(plain_body, "plain"))
-            message.attach(MIMEText(html_body, "html"))
-
-            smtp_cls = smtplib.SMTP_SSL if self.settings.smtp_use_ssl else smtplib.SMTP
-            with smtp_cls(
-                self.settings.smtp_host,
-                self.settings.smtp_port,
-                timeout=self.timeout,
-            ) as server:
-                if self.settings.smtp_use_tls and not self.settings.smtp_use_ssl:
-                    server.starttls()
-                server.login(self.settings.smtp_user, self.settings.smtp_password)
-                server.send_message(message)
-
-            logger.info("transactional_email_sent", to_email=to_email, subject=subject)
-            return True
-        except smtplib.SMTPAuthenticationError as exc:
-            server_error = exc.smtp_error.decode(errors="replace")
-            self.last_error = f"SMTP authentication failed ({exc.smtp_code}): {server_error}"
-            logger.error(
-                "transactional_email_authentication_failed",
-                smtp_host=self.settings.smtp_host,
-                smtp_user=self.settings.smtp_user,
-                smtp_code=exc.smtp_code,
-                smtp_error=server_error,
-            )
-            return False
-        except smtplib.SMTPException as exc:
-            self.last_error = f"SMTP error: {exc}"
-            logger.error("transactional_email_smtp_error", error=str(exc))
-            return False
-        except Exception as exc:
-            self.last_error = str(exc)
-            logger.error("transactional_email_send_failed", error=str(exc), exc_info=True)
             return False
 
     @staticmethod

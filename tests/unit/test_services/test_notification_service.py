@@ -168,7 +168,7 @@ async def test_delivery_sends_email_to_alert_channel_recipient(
             return True
 
     def sender_factory(settings: Settings, recipient: str) -> FakeEmailSender:
-        assert settings.smtp_host == "smtp.titan.email"
+        assert settings.resend_api_key == "re_test"
         return FakeEmailSender(recipient)
 
     channel = NotificationChannel(
@@ -202,11 +202,10 @@ async def test_delivery_sends_email_to_alert_channel_recipient(
     delivered = await NotificationDeliveryService(
         test_db,
         Settings(
+            _env_file=None,
             email_enabled=True,
-            smtp_host="smtp.titan.email",
-            smtp_port=587,
-            smtp_user="michael@clevermike.studio",
-            smtp_password="password",
+            RESENT_API_KEY="re_test",
+            from_email="michael@clevermike.studio",
         ),
         email_sender_factory=sender_factory,
     ).process_pending()
@@ -245,11 +244,10 @@ async def test_delivery_fails_when_email_channel_has_no_recipient(
     delivered = await NotificationDeliveryService(
         test_db,
         Settings(
+            _env_file=None,
             email_enabled=True,
-            smtp_host="smtp.titan.email",
-            smtp_port=587,
-            smtp_user="michael@clevermike.studio",
-            smtp_password="password",
+            RESENT_API_KEY="re_test",
+            from_email="michael@clevermike.studio",
         ),
     ).process_pending()
 
@@ -261,20 +259,18 @@ async def test_delivery_fails_when_email_channel_has_no_recipient(
 
 
 @pytest.mark.unit
-def test_create_email_sender_uses_implicit_ssl_for_port_465() -> None:
+def test_create_email_sender_uses_resend_config() -> None:
     sender = create_email_sender(
         Settings(
+            _env_file=None,
             email_enabled=True,
-            smtp_host="smtp.titan.email",
-            smtp_port=465,
-            smtp_user="michael@clevermike.studio",
-            smtp_password="password",
+            RESENT_API_KEY="re_test",
+            from_email="michael@clevermike.studio",
         ),
         "recipient@example.com",
     )
 
-    assert sender.use_ssl is True
-    assert sender.use_tls is True
+    assert sender.resend_api_key == "re_test"
     assert sender.to_emails == ["recipient@example.com"]
     assert sender.from_email == "michael@clevermike.studio"
     assert sender.from_name == "Michael from Watchdog"
@@ -285,7 +281,7 @@ async def test_delivery_records_email_sender_error(
     test_db: AsyncSession,
 ) -> None:
     class FailingEmailSender:
-        last_error = "SMTP authentication failed (535): invalid credentials"
+        last_error = "Resend API error (401): invalid api key"
 
         async def send(self, payload) -> bool:
             return False
@@ -314,11 +310,10 @@ async def test_delivery_records_email_sender_error(
     delivered = await NotificationDeliveryService(
         test_db,
         Settings(
+            _env_file=None,
             email_enabled=True,
-            smtp_host="smtp.titan.email",
-            smtp_port=465,
-            smtp_user="michael@clevermike.studio",
-            smtp_password="password",
+            RESENT_API_KEY="re_test",
+            from_email="michael@clevermike.studio",
         ),
         email_sender_factory=sender_factory,
     ).process_pending()
@@ -327,4 +322,4 @@ async def test_delivery_records_email_sender_error(
 
     assert delivered == 0
     assert event.status == "FAILED"
-    assert event.error_message == "SMTP authentication failed (535): invalid credentials"
+    assert event.error_message == "Resend API error (401): invalid api key"

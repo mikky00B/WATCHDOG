@@ -152,7 +152,7 @@ def mock_httpx_response():
 
 @pytest.fixture(autouse=True)
 def disable_auth_verification_email(monkeypatch):
-    """Avoid real SMTP calls from auth registration tests."""
+    """Avoid real email calls from auth registration tests."""
 
     async def _noop(*args, **kwargs):
         return True
