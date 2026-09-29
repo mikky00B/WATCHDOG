@@ -151,10 +151,17 @@ def mock_httpx_response():
 
 
 @pytest.fixture(autouse=True)
-def disable_auth_verification_email(monkeypatch):
-    """Avoid real email calls from auth registration tests."""
+def disable_auth_transactional_emails(monkeypatch):
+    """Avoid real transactional email calls from auth tests."""
 
     async def _noop(*args, **kwargs):
         return True
 
-    monkeypatch.setattr("monitoring.services.auth_service.AuthService._send_verification_email", _noop)
+    monkeypatch.setattr(
+        "monitoring.services.auth_service.AuthService._send_verification_email",
+        _noop,
+    )
+    monkeypatch.setattr(
+        "monitoring.services.auth_service.AuthService._send_password_reset_email",
+        _noop,
+    )
