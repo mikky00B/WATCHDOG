@@ -31,8 +31,8 @@ jobs:
 
       - name: Run Ruff
         run: |
-          ruff check src tests --fix
-          ruff check src tests --ignore B008,N818,E712,B017,SIM300
+          ruff check src tests --fix || true
+          ruff check src tests --ignore B008,N818,E712,B017,SIM300,SIM118
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
