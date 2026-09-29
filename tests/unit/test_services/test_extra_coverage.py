@@ -148,3 +148,103 @@ async def test_status_page_invalid_inputs(test_db: AsyncSession) -> None:
     assert await service.get_status_page_by_slug("missing") is None
     assert await service.list_services(uuid.uuid4()) is None
     assert await service.delete_status_page(uuid.uuid4()) is False
+
+
+@pytest.mark.unit
+async def test_rule_engine_additional_rule_types(test_db: AsyncSession, sample_monitor: Monitor) -> None:
+    from datetime import timedelta
+    from monitoring.models.check_result import CheckResult
+    from monitoring.schemas.alert import AlertSeverity
+    from monitoring.services.rule_engine import (
+        ErrorRateRule, LatencyThresholdRule, RuleConfig, RuleEngine, RuleType,
+        StatusCodePatternRule, UptimePercentageRule, create_default_rules,
+    )
+
+    assert len(create_default_rules()) == 4
+    with pytest.raises(ValueError):
+        RuleConfig(rule_type=RuleType.ERROR_RATE, threshold=0)
+    with pytest.raises(ValueError):
+        RuleConfig(rule_type=RuleType.ERROR_RATE, threshold=1, window_minutes=0)
+
+    now = datetime.now(UTC)
+    latest = CheckResult(
+        monitor_id=sample_monitor.id, success=False, status_code=500,
+        latency_ms=2500, error_message="server error", checked_at=now,
+    )
+    test_db.add(latest)
+    await test_db.flush()
+
+    latency = LatencyThresholdRule(RuleConfig(
+        rule_type=RuleType.LATENCY_THRESHOLD, threshold=100,
+        metadata={"require_sustained": False},
+    ))
+    alert = await latency.evaluate(sample_monitor, latest, test_db)
+    assert alert is not None
+
+    status_rule = StatusCodePatternRule(RuleConfig(
+        rule_type=RuleType.STATUS_CODE_PATTERN, threshold=1,
+        metadata={"status_codes": [500]}, severity=AlertSeverity.ERROR,
+    ))
+    alert = await status_rule.evaluate(sample_monitor, latest, test_db)
+    assert alert is not None
+
+    uptime = UptimePercentageRule(RuleConfig(
+        rule_type=RuleType.UPTIME_PERCENTAGE, threshold=95, window_minutes=60,
+    ))
+    for i in range(10):
+        test_db.add(CheckResult(
+            monitor_id=sample_monitor.id, success=i != 0,
+            status_code=200 if i else 500, latency_ms=10,
+            checked_at=now - timedelta(seconds=i),
+        ))
+    await test_db.flush()
+    assert await uptime.evaluate(sample_monitor, latest, test_db) is not None
+
+    error_rate = ErrorRateRule(RuleConfig(
+        rule_type=RuleType.ERROR_RATE, threshold=20, window_minutes=60,
+    ))
+    assert await error_rate.evaluate(sample_monitor, latest, test_db) is not None
+
+    engine = RuleEngine()
+    engine.register_rules(sample_monitor.id, [
+        latency,
+        StatusCodePatternRule(RuleConfig(
+            rule_type=RuleType.STATUS_CODE_PATTERN, threshold=1,
+            enabled=False, metadata={"status_codes": [500]},
+        )),
+    ])
+    assert len(await engine.get_monitor_rules(sample_monitor.id)) == 1
+    alerts = await engine.evaluate_all(sample_monitor, latest, test_db)
+    assert alerts
+    engine.clear_alert_cache(sample_monitor.id)
+    engine.unregister_rules(sample_monitor.id)
+    assert await engine.get_monitor_rules(sample_monitor.id) == []
+
+
+@pytest.mark.unit
+async def test_monitor_service_heartbeat_and_stats(test_db: AsyncSession) -> None:
+    from monitoring.schemas.monitor import MonitorCreate
+    from monitoring.services.monitor_service import MonitorService
+    from monitoring.models.check_result import CheckResult
+
+    service = MonitorService(test_db)
+    heartbeat = await service.create_monitor(MonitorCreate(
+        name="Heartbeat", monitor_type="HEARTBEAT", interval_seconds=60,
+    ))
+    assert heartbeat.heartbeat_key
+    assert await service.get_monitor_by_heartbeat_key(heartbeat.heartbeat_key) is heartbeat
+    assert await service.ping_heartbeat_monitor(heartbeat.heartbeat_key) is heartbeat
+    assert await service.ping_heartbeat_monitor("missing") is None
+
+    http_monitor = await service.create_monitor(MonitorCreate(
+        name="Stats", url="https://stats.example.com", interval_seconds=60,
+    ))
+    test_db.add_all([
+        CheckResult(monitor_id=http_monitor.id, success=True, status_code=200, latency_ms=10, checked_at=datetime.now(UTC)),
+        CheckResult(monitor_id=http_monitor.id, success=False, status_code=500, latency_ms=None, error_message="down", checked_at=datetime.now(UTC)),
+    ])
+    await test_db.flush()
+    stats = await service.get_stats(http_monitor.public_id)
+    assert stats is not None and stats["failed_checks"] == 1
+    assert await service.get_stats(__import__("uuid").uuid4()) is None
+    assert await service.list_check_results(__import__("uuid").uuid4()) is None
