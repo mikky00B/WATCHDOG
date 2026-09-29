@@ -18,7 +18,6 @@ import {
   Pencil,
   Plus,
   RadioTower,
-  ShieldAlert,
   SquareChartGantt,
   Trash2,
   UserCircle,
@@ -26,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { LogoMark } from "./LogoMark";
 import {
   alertChannelService,
   alertService,
@@ -228,7 +228,7 @@ function LandingPage() {
     <main className="landing">
       <nav className="topbar">
         <Link className="brand" to="/">
-          <ShieldAlert size={24} />
+          <LogoMark size={26} mono />
           WATCHDOG
         </Link>
         <div className="nav-actions">
@@ -310,7 +310,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
     return (
       <main className="auth-shell">
         <Link className="brand" to="/">
-          <ShieldAlert size={24} />
+          <LogoMark size={26} />
           WATCHDOG
         </Link>
         <form
@@ -359,7 +359,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
   return (
     <main className="auth-shell">
       <Link className="brand" to="/">
-        <ShieldAlert size={24} />
+        <LogoMark size={26} />
         WATCHDOG
       </Link>
       <form
@@ -432,7 +432,7 @@ function PasswordResetPage() {
   return (
     <main className="auth-shell">
       <Link className="brand" to="/">
-        <ShieldAlert size={24} />
+        <LogoMark size={26} />
         WATCHDOG
       </Link>
       <form
@@ -542,7 +542,7 @@ function Shell() {
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="sidebar-head">
             <Link className="brand" to="/app">
-              <ShieldAlert size={24} />
+              <LogoMark size={26} />
               WATCHDOG
             </Link>
             <button
@@ -2192,7 +2192,10 @@ function PublicStatusPage() {
             )}
           </section>
           <footer className="public-footer">
-            Powered by <Link to="/">WATCHDOG</Link>
+            <LogoMark size={15} />
+            <span>
+              Powered by <Link to="/">WATCHDOG</Link>
+            </span>
           </footer>
         </section>
       ) : null}

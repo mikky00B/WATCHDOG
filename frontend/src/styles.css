@@ -924,6 +924,10 @@ tr:last-child td {
 }
 
 .public-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   margin: 28px auto 0;
   color: #6b7890;
   font-size: 14px;
