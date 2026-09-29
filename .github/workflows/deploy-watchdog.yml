@@ -27,12 +27,10 @@ jobs:
           pip install -e .
 
       - name: Run backend tests
-        run: |
-          pytest
+        run: pytest
 
       - name: Run Ruff
-        run: |
-          ruff check src tests
+        run: ruff check src tests
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -71,16 +69,13 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "Activating virtual environment..."
-            source venv/bin/activate
-
             echo "Installing backend dependencies..."
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-            pip install -e .
+            .venv/bin/python -m pip install --upgrade pip
+            .venv/bin/pip install -r requirements.txt
+            .venv/bin/pip install -e .
 
             echo "Running database migrations..."
-            python -m alembic upgrade head
+            .venv/bin/python -m alembic upgrade head
 
             echo "Building frontend..."
             cd frontend
@@ -98,7 +93,7 @@ jobs:
             echo "Restarting WATCHDOG..."
             sudo systemctl restart watchdog
 
-            echo "Checking WATCHDOG service..."
+            echo "Checking WATCHDOG..."
             sudo systemctl is-active --quiet watchdog
 
             echo "WATCHDOG deployment successful."
