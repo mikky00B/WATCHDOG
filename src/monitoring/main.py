@@ -25,7 +25,7 @@ from monitoring.api.v1 import (
 from monitoring.api.v1.integrations import telegram as telegram_integration
 from monitoring.config import get_settings
 from monitoring.database import close_db, init_db
-from monitoring.dependencies import DbSession, OptionalCurrentUser
+from monitoring.dependencies import CurrentUser, DbSession
 from monitoring.models.alert import Alert
 from monitoring.models.check_result import CheckResult
 from monitoring.models.monitor import Monitor
@@ -187,10 +187,10 @@ async def health_check() -> dict[str, str]:
 @app.get("/api/v1/stats")
 async def get_stats(
     db: DbSession,
-    current_user: OptionalCurrentUser,
+    current_user: CurrentUser,
     organization_id: str | None = None,
 ) -> dict[str, int]:
-    """Get aggregate stats for the dashboard."""
+    """Get aggregate stats for the dashboard (authentication required)."""
     internal_organization_id = None
     if organization_id is not None:
         import uuid
@@ -206,7 +206,6 @@ async def get_stats(
         )
         if (
             organization is None
-            or current_user is None
             or not await OrganizationService(db).user_can_access(current_user, organization.id)
         ):
             return {
