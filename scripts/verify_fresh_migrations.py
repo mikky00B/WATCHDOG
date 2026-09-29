@@ -14,7 +14,6 @@ import sys
 
 import asyncpg
 
-
 REQUIRED_TABLES = {
     "alembic_version",
     "alerts",

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 from monitoring.alerting.base import AlertPayload
 from monitoring.alerting.email import EmailAlertChannel
 from monitoring.alerting.webhook import WebhookAlertChannel

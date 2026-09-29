@@ -1,7 +1,7 @@
 """Telegram service for webhook update handling and command execution."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import structlog
@@ -264,7 +264,7 @@ class TelegramService:
         return True, f"Alert {alert_id} resolved"
 
     async def _failed_checks_last_24h(self) -> int:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
         result = await self.db.execute(
             text(
                 """

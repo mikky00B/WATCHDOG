@@ -4,8 +4,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.check_result import CheckResult
 from monitoring.models.monitor import Monitor
 from monitoring.schemas.alert import AlertSeverity
@@ -16,6 +14,7 @@ from monitoring.services.rule_engine import (
     RuleEngine,
     RuleType,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _result(monitor_id: int, success: bool, latency_ms: float | None = 100.0,

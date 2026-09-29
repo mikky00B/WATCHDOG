@@ -5,12 +5,11 @@ from datetime import datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from monitoring.main import app
 from monitoring.database import get_db
+from monitoring.main import app
 from monitoring.models.alert import Alert
 from monitoring.models.monitor import Monitor
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def _client(test_db: AsyncSession) -> AsyncClient:

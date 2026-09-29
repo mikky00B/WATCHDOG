@@ -4,11 +4,10 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.alert import Alert
 from monitoring.schemas.alert import AlertCreate, AlertSeverity, AlertUpdate
 from monitoring.services.alert_service import AlertService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _alert_create(monitor_id: int, severity: str = "warning") -> AlertCreate:

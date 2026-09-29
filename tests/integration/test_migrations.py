@@ -7,7 +7,6 @@ import sys
 import asyncpg
 import pytest
 
-
 REQUIRED_TABLES = {
     "alembic_version",
     "alerts",
@@ -70,4 +69,4 @@ async def test_alembic_upgrade_head_creates_fresh_postgresql_schema() -> None:
         await connection.close()
 
     created_tables = {row["table_name"] for row in rows}
-    assert REQUIRED_TABLES <= created_tables
+    assert created_tables >= REQUIRED_TABLES

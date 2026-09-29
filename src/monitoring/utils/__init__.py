@@ -5,7 +5,7 @@ from monitoring.utils.exceptions import (
     AlertNotFoundError,
     CheckError,
     HeartbeatNotFoundError,
-    MonitoringException,
+    MonitoringError,
     MonitorNotFoundError,
 )
 from monitoring.utils.logging import get_logger, setup_logging
@@ -13,7 +13,7 @@ from monitoring.utils.logging import get_logger, setup_logging
 __all__ = [
     "setup_logging",
     "get_logger",
-    "MonitoringException",
+    "MonitoringError",
     "MonitorNotFoundError",
     "AlertNotFoundError",
     "HeartbeatNotFoundError",

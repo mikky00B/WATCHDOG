@@ -13,15 +13,14 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 # ─────────────────────────────────────────────────────────────────────────
 
+# Import models and config (works now that src/ is on path)
+from monitoring.config import get_settings
+from monitoring.models.base import Base
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-
-# Import models and config (works now that src/ is on path)
-from monitoring.config import get_settings
-from monitoring.models.base import Base
 
 # This is the Alembic Config object
 config = context.config

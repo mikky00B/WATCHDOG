@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.heartbeat import Heartbeat
 from monitoring.schemas.heartbeat import HeartbeatCreate, HeartbeatUpdate
 from monitoring.services.heartbeat_service import HeartbeatService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.unit

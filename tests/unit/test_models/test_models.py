@@ -5,12 +5,11 @@ import uuid
 from datetime import datetime
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.alert import Alert
 from monitoring.models.check_result import CheckResult
 from monitoring.models.heartbeat import Heartbeat
 from monitoring.models.monitor import Monitor
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.unit

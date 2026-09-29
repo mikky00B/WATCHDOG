@@ -4,15 +4,18 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.monitor import Monitor
 from monitoring.models.organization import Organization
 from monitoring.models.user import User
 from monitoring.schemas.auth import RegisterRequest
-from monitoring.schemas.status_page import StatusPageCreate, StatusPageServiceCreate, StatusPageUpdate
+from monitoring.schemas.status_page import (
+    StatusPageCreate,
+    StatusPageServiceCreate,
+    StatusPageUpdate,
+)
 from monitoring.services.auth_service import AuthService
 from monitoring.services.status_page_service import StatusPageService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.unit
@@ -153,11 +156,18 @@ async def test_status_page_invalid_inputs(test_db: AsyncSession) -> None:
 @pytest.mark.unit
 async def test_rule_engine_additional_rule_types(test_db: AsyncSession, sample_monitor: Monitor) -> None:
     from datetime import timedelta
+
     from monitoring.models.check_result import CheckResult
     from monitoring.schemas.alert import AlertSeverity
     from monitoring.services.rule_engine import (
-        ErrorRateRule, LatencyThresholdRule, RuleConfig, RuleEngine, RuleType,
-        StatusCodePatternRule, UptimePercentageRule, create_default_rules,
+        ErrorRateRule,
+        LatencyThresholdRule,
+        RuleConfig,
+        RuleEngine,
+        RuleType,
+        StatusCodePatternRule,
+        UptimePercentageRule,
+        create_default_rules,
     )
 
     assert len(create_default_rules()) == 4
@@ -223,9 +233,9 @@ async def test_rule_engine_additional_rule_types(test_db: AsyncSession, sample_m
 
 @pytest.mark.unit
 async def test_monitor_service_heartbeat_and_stats(test_db: AsyncSession) -> None:
+    from monitoring.models.check_result import CheckResult
     from monitoring.schemas.monitor import MonitorCreate
     from monitoring.services.monitor_service import MonitorService
-    from monitoring.models.check_result import CheckResult
 
     service = MonitorService(test_db)
     heartbeat = await service.create_monitor(MonitorCreate(
@@ -253,8 +263,11 @@ async def test_monitor_service_heartbeat_and_stats(test_db: AsyncSession) -> Non
 @pytest.mark.unit
 def test_monitoring_exception_messages() -> None:
     from monitoring.utils.exceptions import (
-        AlertDeliveryError, AlertNotFoundError, CheckError,
-        HeartbeatNotFoundError, MonitorNotFoundError,
+        AlertDeliveryError,
+        AlertNotFoundError,
+        CheckError,
+        HeartbeatNotFoundError,
+        MonitorNotFoundError,
     )
     assert str(MonitorNotFoundError(1)) == "Monitor 1 not found"
     assert str(MonitorNotFoundError("x")) == "Monitor x not found"

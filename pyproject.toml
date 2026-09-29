@@ -52,7 +52,12 @@ select = [
 ignore = ["E501"]
 
 [tool.ruff.per-file-ignores]
-"__init__.py" = ["F401"]
+"__init__.py" = ["F401"]  # Unused imports in __init__ files
+"alembic/*" = ["E402"]    # env.py configures sys.path before imports
+"scripts/*" = ["E402", "T201"]  # CLI utilities: sys.path setup and print output
+
+[tool.ruff.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]  # Depends() in defaults is idiomatic FastAPI
 
 [tool.mypy]
 python_version = "3.11"

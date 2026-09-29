@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from monitoring.main import app
 from monitoring.database import get_db
+from monitoring.main import app
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def _client(test_db: AsyncSession) -> AsyncClient:

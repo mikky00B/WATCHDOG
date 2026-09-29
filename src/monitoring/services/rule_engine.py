@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
 import structlog
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from monitoring.models.check_result import CheckResult
@@ -75,7 +75,7 @@ class Rule(ABC):
 
     def _get_window_start(self) -> datetime:
         """Get the start of the evaluation window with proper timezone."""
-        return datetime.now(timezone.utc) - timedelta(
+        return datetime.now(UTC) - timedelta(
             minutes=self.config.window_minutes
         )
 
@@ -144,7 +144,7 @@ class ConsecutiveFailuresRule(Rule):
                 severity=self.config.severity,
                 title=f"Monitor '{monitor.name}' has {len(recent_checks)} consecutive failures",
                 message=f"Recent errors: {error_context}",
-                triggered_at=datetime.now(timezone.utc),
+                triggered_at=datetime.now(UTC),
             )
 
         return None
@@ -211,7 +211,7 @@ class LatencyThresholdRule(Rule):
                     f"Current latency: {latest_result.latency_ms:.2f}ms "
                     f"(threshold: {threshold_ms}ms)"
                 ),
-                triggered_at=datetime.now(timezone.utc),
+                triggered_at=datetime.now(UTC),
             )
 
         return None
@@ -271,7 +271,7 @@ class ErrorRateRule(Rule):
                     f"in last {self.config.window_minutes} minutes "
                     f"(threshold: {threshold_percentage}%)"
                 ),
-                triggered_at=datetime.now(timezone.utc),
+                triggered_at=datetime.now(UTC),
             )
 
         return None
@@ -326,7 +326,7 @@ class UptimePercentageRule(Rule):
                     f"in last {self.config.window_minutes} minutes "
                     f"(threshold: {threshold_percentage}%)"
                 ),
-                triggered_at=datetime.now(timezone.utc),
+                triggered_at=datetime.now(UTC),
             )
 
         return None
@@ -368,7 +368,7 @@ class StatusCodePatternRule(Rule):
                     f"Received status code {latest_result.status_code} which matches alert pattern. "
                     f"Error: {latest_result.error_message or 'No error message'}"
                 ),
-                triggered_at=datetime.now(timezone.utc),
+                triggered_at=datetime.now(UTC),
             )
 
         return None
@@ -422,13 +422,13 @@ class RuleEngine:
         if last_alert is None:
             return True
 
-        time_since_last = datetime.now(timezone.utc) - last_alert
+        time_since_last = datetime.now(UTC) - last_alert
         return time_since_last.total_seconds() > (self._alert_cooldown_minutes * 60)
 
     def _record_alert(self, monitor_id: int, rule_type: str) -> None:
         """Record that an alert was triggered."""
         cache_key = (monitor_id, rule_type)
-        self._alert_cache[cache_key] = datetime.now(timezone.utc)
+        self._alert_cache[cache_key] = datetime.now(UTC)
 
     async def evaluate_all(
         self,
@@ -511,7 +511,7 @@ class RuleEngine:
             logger.info("alert_cache_cleared_all")
         else:
             keys_to_remove = [
-                key for key in self._alert_cache.keys() if key[0] == monitor_id
+                key for key in self._alert_cache if key[0] == monitor_id
             ]
             for key in keys_to_remove:
                 del self._alert_cache[key]

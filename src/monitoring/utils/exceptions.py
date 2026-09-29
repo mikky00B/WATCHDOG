@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 
-class MonitoringException(Exception):
+class MonitoringError(Exception):
     """Base exception for monitoring platform."""
 
     pass
 
 
-class MonitorNotFoundError(MonitoringException):
+class MonitorNotFoundError(MonitoringError):
     """Raised when a monitor cannot be found."""
 
     def __init__(self, monitor_id: int | str):
@@ -15,7 +15,7 @@ class MonitorNotFoundError(MonitoringException):
         super().__init__(f"Monitor {monitor_id} not found")
 
 
-class AlertNotFoundError(MonitoringException):
+class AlertNotFoundError(MonitoringError):
     """Raised when an alert cannot be found."""
 
     def __init__(self, alert_id: int):
@@ -23,7 +23,7 @@ class AlertNotFoundError(MonitoringException):
         super().__init__(f"Alert {alert_id} not found")
 
 
-class HeartbeatNotFoundError(MonitoringException):
+class HeartbeatNotFoundError(MonitoringError):
     """Raised when a heartbeat cannot be found."""
 
     def __init__(self, heartbeat_id: str):
@@ -31,7 +31,7 @@ class HeartbeatNotFoundError(MonitoringException):
         super().__init__(f"Heartbeat {heartbeat_id} not found")
 
 
-class CheckError(MonitoringException):
+class CheckError(MonitoringError):
     """Raised when a health check fails."""
 
     def __init__(self, monitor_id: int, reason: str):
@@ -40,7 +40,7 @@ class CheckError(MonitoringException):
         super().__init__(f"Check failed for monitor {monitor_id}: {reason}")
 
 
-class AlertDeliveryError(MonitoringException):
+class AlertDeliveryError(MonitoringError):
     """Raised when alert delivery fails."""
 
     def __init__(self, alert_id: int, channel: str, reason: str):

@@ -5,12 +5,11 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
-
-from monitoring.schemas.alert import AlertCreate, AlertResponse, AlertSeverity, AlertUpdate
-from monitoring.schemas.check import CheckResultCreate, CheckResultResponse
-from monitoring.schemas.heartbeat import HeartbeatCreate, HeartbeatResponse, HeartbeatUpdate
+from monitoring.schemas.alert import AlertCreate, AlertSeverity, AlertUpdate
+from monitoring.schemas.check import CheckResultCreate
+from monitoring.schemas.heartbeat import HeartbeatCreate, HeartbeatUpdate
 from monitoring.schemas.monitor import MonitorCreate, MonitorResponse, MonitorUpdate
-
+from pydantic import ValidationError
 
 # ── MonitorCreate ─────────────────────────────────────────────────────────────
 
@@ -30,25 +29,25 @@ def test_monitor_create_min_interval() -> None:
 
 @pytest.mark.unit
 def test_monitor_create_interval_too_low() -> None:
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(ValidationError):  # pydantic ValidationError
         MonitorCreate(name="Bad", url="https://example.com", interval_seconds=5)
 
 
 @pytest.mark.unit
 def test_monitor_create_interval_too_high() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MonitorCreate(name="Bad", url="https://example.com", interval_seconds=9999)
 
 
 @pytest.mark.unit
 def test_monitor_create_invalid_url() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MonitorCreate(name="Bad", url="not-a-url", interval_seconds=60)
 
 
 @pytest.mark.unit
 def test_monitor_create_empty_name() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MonitorCreate(name="", url="https://example.com", interval_seconds=60)
 
 
@@ -107,7 +106,7 @@ def test_alert_create_all_severities() -> None:
 
 @pytest.mark.unit
 def test_alert_create_title_too_long() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         AlertCreate(
             monitor_id=1, severity=AlertSeverity.INFO,
             title="x" * 501, message="M",

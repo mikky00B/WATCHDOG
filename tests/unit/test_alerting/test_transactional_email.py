@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from monitoring.alerting.transactional_email import TransactionalEmailSender
 from monitoring.config import Settings
 

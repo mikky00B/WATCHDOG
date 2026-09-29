@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from email.utils import formataddr
 
-
 DEFAULT_FROM_NAME = "Michael from Watchdog"
 
 

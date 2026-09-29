@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.models.monitor import Monitor
 from monitoring.schemas.monitor import MonitorCreate, MonitorUpdate
 from monitoring.services.monitor_service import MonitorService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.unit

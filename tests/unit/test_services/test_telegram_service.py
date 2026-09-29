@@ -4,10 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from monitoring.schemas.telegram import TelegramCallbackQuery, TelegramMessage, TelegramUpdate
 from monitoring.services.telegram_service import TelegramService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.unit

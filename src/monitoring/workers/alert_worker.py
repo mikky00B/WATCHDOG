@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import Dict
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select
@@ -47,7 +46,7 @@ class AlertWorker:
         self.running = False
 
         # Track delivery attempts: alert_id -> (attempt_count, last_attempt_time)
-        self._delivery_attempts: Dict[int, tuple[int, datetime]] = {}
+        self._delivery_attempts: dict[int, tuple[int, datetime]] = {}
 
     async def start(self) -> None:
         """Start the alert worker."""
@@ -97,7 +96,7 @@ class AlertWorker:
             return False
 
         # Check if enough time has passed since last attempt
-        time_since_last = datetime.now(timezone.utc) - last_attempt
+        time_since_last = datetime.now(UTC) - last_attempt
         if time_since_last.total_seconds() < self.retry_delay_seconds:
             return False
 
@@ -109,10 +108,10 @@ class AlertWorker:
             attempt_count, _ = self._delivery_attempts[alert_id]
             self._delivery_attempts[alert_id] = (
                 attempt_count + 1,
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
             )
         else:
-            self._delivery_attempts[alert_id] = (1, datetime.now(timezone.utc))
+            self._delivery_attempts[alert_id] = (1, datetime.now(UTC))
 
     def _clear_delivery_attempt(self, alert_id: int) -> None:
         """Clear delivery attempt tracking for an alert."""
@@ -127,9 +126,8 @@ class AlertWorker:
                 select(Alert)
                 .options(joinedload(Alert.monitor))
                 .where(Alert.resolved == False)  # noqa: E712
-                .where(
-                    Alert.acknowledged == False
-                )  # noqa: E712 - Don't re-send acknowledged alerts
+                # Don't re-send acknowledged alerts
+                .where(Alert.acknowledged == False)  # noqa: E712
                 .order_by(Alert.triggered_at.asc())  # Oldest first
                 .limit(self.batch_size)
             )
@@ -156,7 +154,7 @@ class AlertWorker:
 
     def _cleanup_old_attempts(self) -> None:
         """Remove tracking for old delivery attempts."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        cutoff = datetime.now(UTC) - timedelta(hours=1)
         to_remove = [
             alert_id
             for alert_id, (_, last_attempt) in self._delivery_attempts.items()
