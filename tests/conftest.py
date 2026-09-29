@@ -6,7 +6,6 @@ The async SQLAlchemy engine is swapped to SQLite for all unit tests.
 """
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from unittest.mock import MagicMock
@@ -21,15 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # unit-testing service logic and ORM queries.
 # Important: "check_same_thread=False" is required for SQLite + asyncio.
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> asyncio.AbstractEventLoop:
-    """Single event loop for the whole test session."""
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")

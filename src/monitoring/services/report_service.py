@@ -302,7 +302,7 @@ class ReportService:
             if incident.resolved_at is not None
             else None
         )
-        end = resolved_at or min(datetime.utcnow(), period_end)
+        end = resolved_at or min(datetime.now(UTC).replace(tzinfo=None), period_end)
         start = max(started_at, period_start)
         bounded_end = min(end, period_end)
         return max(0, int((bounded_end - start).total_seconds()))
