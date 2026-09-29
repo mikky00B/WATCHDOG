@@ -64,6 +64,36 @@ async def test_create_monitor_interval_too_low(test_db: AsyncSession) -> None:
 
 
 @pytest.mark.integration
+async def test_create_monitor_unsafe_url_rejected(test_db: AsyncSession) -> None:
+    """SSRF guard: localhost/private URLs must be rejected at create time, not first check."""
+    async with await _make_client(test_db) as client:
+        resp = await client.post("/api/v1/monitors/", json={
+            "name": "Localhost Monitor",
+            "url": "http://localhost:9999",
+            "interval_seconds": 60,
+        })
+    app.dependency_overrides.clear()
+    assert resp.status_code == 422
+    assert "blocked" in resp.json()["detail"].lower()
+
+
+@pytest.mark.integration
+async def test_update_monitor_unsafe_url_rejected(test_db: AsyncSession) -> None:
+    async with await _make_client(test_db) as client:
+        created = await client.post("/api/v1/monitors/", json={
+            "name": "Safe Monitor",
+            "url": "https://example.com",
+            "interval_seconds": 60,
+        })
+        monitor_id = created.json()["public_id"]
+        resp = await client.patch(f"/api/v1/monitors/{monitor_id}", json={
+            "url": "http://127.0.0.1:8080",
+        })
+    app.dependency_overrides.clear()
+    assert resp.status_code == 422
+
+
+@pytest.mark.integration
 async def test_list_monitors_empty(test_db: AsyncSession) -> None:
     async with await _make_client(test_db) as client:
         resp = await client.get("/api/v1/monitors/")

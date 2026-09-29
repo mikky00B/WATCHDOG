@@ -16,8 +16,25 @@ from monitoring.schemas.monitor import (
 )
 from monitoring.services.monitor_service import MonitorService
 from monitoring.services.organization_service import OrganizationService
+from monitoring.utils.url_safety import UnsafeURLError, validate_url_scheme_and_host
 
 router = APIRouter()
+
+
+def _validate_monitor_url(url: str | None) -> None:
+    """Reject unsafe monitor URLs at create/update time instead of first check.
+
+    Static checks only (no DNS) — resolvability stays a check-time concern.
+    """
+    if url is None:
+        return
+    try:
+        validate_url_scheme_and_host(str(url))
+    except UnsafeURLError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 def _monitor_response(monitor: Monitor) -> MonitorResponse:
@@ -67,6 +84,7 @@ async def create_monitor(
 ) -> MonitorResponse:
     """Create a new monitor."""
     service = MonitorService(db)
+    _validate_monitor_url(monitor_in.url)
     if monitor_in.organization_id is not None:
         organization = await OrganizationService(db).get_organization(monitor_in.organization_id)
         if (
@@ -248,6 +266,7 @@ async def update_monitor(
 ) -> MonitorResponse:
     """Update a monitor."""
     service = MonitorService(db)
+    _validate_monitor_url(monitor_in.url)
     existing = await service.get_monitor(monitor_id)
     if (
         existing is not None

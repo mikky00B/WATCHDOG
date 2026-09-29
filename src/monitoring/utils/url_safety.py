@@ -44,9 +44,11 @@ def _iter_resolved_ips(hostname: str, port: int) -> set[ipaddress.IPv4Address | 
     return resolved
 
 
-def validate_url_is_safe(url: str) -> None:
-    """Validate that a user-supplied monitor URL is safe for outbound checks."""
+def validate_url_scheme_and_host(url: str) -> None:
+    """Static safety checks without DNS: scheme, hostname blocklist, literal private IPs.
 
+    Suitable for request-time validation (create/update) — no blocking network calls.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise UnsafeURLError("Only HTTP and HTTPS monitor URLs are allowed")
@@ -61,12 +63,21 @@ def validate_url_is_safe(url: str) -> None:
     try:
         ip = ipaddress.ip_address(hostname)
     except ValueError:
-        ip = None
-
-    if ip is not None:
-        if _is_blocked_ip(ip):
-            raise UnsafeURLError("Monitor URL resolves to a blocked IP address")
         return
+
+    if _is_blocked_ip(ip):
+        raise UnsafeURLError("Monitor URL resolves to a blocked IP address")
+
+
+def validate_url_is_safe(url: str) -> None:
+    """Validate that a user-supplied monitor URL is safe for outbound checks.
+
+    Includes DNS resolution; the static-only variant is validate_url_scheme_and_host.
+    """
+    validate_url_scheme_and_host(url)
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname.rstrip(".").lower()
 
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
