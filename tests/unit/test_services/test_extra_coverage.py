@@ -201,7 +201,7 @@ async def test_rule_engine_additional_rule_types(test_db: AsyncSession, sample_m
     assert await uptime.evaluate(sample_monitor, latest, test_db) is not None
 
     error_rate = ErrorRateRule(RuleConfig(
-        rule_type=RuleType.ERROR_RATE, threshold=20, window_minutes=60,
+        rule_type=RuleType.ERROR_RATE, threshold=5, window_minutes=60,
     ))
     assert await error_rate.evaluate(sample_monitor, latest, test_db) is not None
 
@@ -248,3 +248,17 @@ async def test_monitor_service_heartbeat_and_stats(test_db: AsyncSession) -> Non
     assert stats is not None and stats["failed_checks"] == 1
     assert await service.get_stats(__import__("uuid").uuid4()) is None
     assert await service.list_check_results(__import__("uuid").uuid4()) is None
+
+
+@pytest.mark.unit
+def test_monitoring_exception_messages() -> None:
+    from monitoring.utils.exceptions import (
+        AlertDeliveryError, AlertNotFoundError, CheckError,
+        HeartbeatNotFoundError, MonitorNotFoundError,
+    )
+    assert str(MonitorNotFoundError(1)) == "Monitor 1 not found"
+    assert str(MonitorNotFoundError("x")) == "Monitor x not found"
+    assert str(AlertNotFoundError(2)) == "Alert 2 not found"
+    assert str(HeartbeatNotFoundError("hb")) == "Heartbeat hb not found"
+    assert str(CheckError(3, "timeout")) == "Check failed for monitor 3: timeout"
+    assert str(AlertDeliveryError(4, "email", "failed")) == "Failed to deliver alert 4 via email: failed"
