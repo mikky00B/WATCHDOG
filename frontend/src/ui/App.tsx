@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -73,6 +73,58 @@ const NotificationContext = createContext<Notify>(() => undefined);
 
 function useNotify() {
   return useContext(NotificationContext);
+}
+
+type ConfirmOptions = {
+  title: string;
+  message?: string;
+  confirmLabel?: string;
+};
+
+const ConfirmContext = createContext<(options: ConfirmOptions) => Promise<boolean>>(async () => false);
+
+function useConfirm() {
+  return useContext(ConfirmContext);
+}
+
+function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const [options, setOptions] = useState<ConfirmOptions | null>(null);
+  const resolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const confirmAction = useCallback((next: ConfirmOptions) => {
+    setOptions(next);
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+    });
+  }, []);
+
+  const close = useCallback((value: boolean) => {
+    setOptions(null);
+    resolverRef.current?.(value);
+    resolverRef.current = null;
+  }, []);
+
+  return (
+    <ConfirmContext.Provider value={confirmAction}>
+      {children}
+      {options ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+            <h2 id="confirm-modal-title">{options.title}</h2>
+            {options.message ? <p>{options.message}</p> : null}
+            <div className="modal-actions">
+              <button className="button secondary" type="button" onClick={() => close(false)}>
+                Cancel
+              </button>
+              <button className="button danger" type="button" onClick={() => close(true)}>
+                {options.confirmLabel ?? "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </ConfirmContext.Provider>
+  );
 }
 
 function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -180,9 +232,8 @@ function LandingPage() {
           WATCHDOG
         </Link>
         <div className="nav-actions">
-          <Link to="/login">Login</Link>
-          <Link className="button primary" to="/register">
-            Start monitoring
+          <Link className="button inverse" to="/login">
+            Login
           </Link>
         </div>
       </nav>
@@ -195,32 +246,6 @@ function LandingPage() {
             <Link className="button primary" to="/register">
               Create account
             </Link>
-            <Link className="button secondary" to="/login">
-              Open dashboard
-            </Link>
-          </div>
-        </div>
-        <div className="hero-panel">
-          <div className="signal-row">
-            <CheckCircle2 />
-            <div>
-              <strong>Agency API</strong>
-              <span>UP · 241 ms</span>
-            </div>
-          </div>
-          <div className="signal-row warn">
-            <Clock />
-            <div>
-              <strong>Backup heartbeat</strong>
-              <span>Next check in 14 minutes</span>
-            </div>
-          </div>
-          <div className="signal-row bad">
-            <AlertTriangle />
-            <div>
-              <strong>Client storefront</strong>
-              <span>Incident opened · alert queued</span>
-            </div>
           </div>
         </div>
       </section>
@@ -366,6 +391,7 @@ function AuthPage({ mode }: { mode: "login" | "register" }) {
             required
           />
         </label>
+        {mode === "register" ? <p className="field-hint">Use at least 8 characters.</p> : null}
         {mutation.isError ? <p className="error-text">{unwrapError(mutation.error)}</p> : null}
         <button className="button primary full" disabled={mutation.isPending}>
           {mutation.isPending ? "Working..." : mode === "login" ? "Log in" : "Register"}
@@ -561,26 +587,34 @@ function Shell() {
             </button>
             <div className="workspace-selector">
               <span className="eyebrow">Workspace</span>
-              <select
-                value={selected?.public_id ?? ""}
-                onChange={(event) => {
-                  localStorage.setItem("watchdog_organization_public_id", event.target.value);
-                  queryClient.invalidateQueries();
-                  notify("Workspace switched.", "info");
-                }}
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.public_id} value={organization.public_id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
+              {organizations.length ? (
+                <select
+                  value={selected?.public_id ?? ""}
+                  onChange={(event) => {
+                    localStorage.setItem("watchdog_organization_public_id", event.target.value);
+                    queryClient.invalidateQueries();
+                    notify("Workspace switched.", "info");
+                  }}
+                >
+                  {organizations.map((organization) => (
+                    <option key={organization.public_id} value={organization.public_id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select disabled aria-label="No workspace yet">
+                  <option>No organization yet</option>
+                </select>
+              )}
             </div>
             <div className="header-actions">
-              <Link className="button secondary" to="/app/organizations/new">
-                <Building2 size={16} />
-                Organization
-              </Link>
+              {organizations.length ? (
+                <Link className="button secondary" to="/app/organizations/new">
+                  <Building2 size={16} />
+                  Organization
+                </Link>
+              ) : null}
               <div className="account-menu">
                 <button
                   className="account-button"
@@ -595,7 +629,6 @@ function Shell() {
                 </button>
                 {isAccountMenuOpen ? (
                   <div className="account-popover" role="menu">
-                    <strong>{user?.full_name ?? "Account"}</strong>
                     <button type="button" role="menuitem" onClick={logout}>
                       <LogOut size={16} />
                       Log out
@@ -718,6 +751,18 @@ function Overview({ organization }: { organization: Organization }) {
       {stats.isError ? <ErrorBox message={unwrapError(stats.error)} /> : null}
       {data ? (
         <>
+          {monitors.data && !monitors.data.monitors.length ? (
+            <div className="cta-panel">
+              <div>
+                <h2>Create your first monitor</h2>
+                <p>Add a website, API, or heartbeat job to start tracking uptime.</p>
+              </div>
+              <Link className="button primary" to="/app/monitors/new">
+                <Plus size={16} />
+                New monitor
+              </Link>
+            </div>
+          ) : null}
           <div className="metric-grid">
             <Metric label="Total monitors" value={data.total_monitors} icon={MonitorCheck} />
             <Metric label="Enabled monitors" value={data.enabled_monitors} icon={CheckCircle2} />
@@ -769,6 +814,7 @@ function Overview({ organization }: { organization: Organization }) {
 function MonitorList({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   if (!organization) {
     return <EmptyOrganizations />;
   }
@@ -815,11 +861,17 @@ function MonitorList({ organization }: { organization?: Organization }) {
               <button
                 className="icon-button"
                 title="Delete monitor"
+                aria-label={`Delete monitor ${monitor.name}`}
                 disabled={remove.isPending}
                 onClick={() => {
-                  if (confirm(`Delete monitor "${monitor.name}"?`)) {
-                    remove.mutate(monitor.public_id);
-                  }
+                  confirmAction({
+                    title: `Delete monitor "${monitor.name}"?`,
+                    message: "Its check history and incidents will remain in reports.",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      remove.mutate(monitor.public_id);
+                    }
+                  });
                 }}
               >
                 <Trash2 size={16} />
@@ -935,6 +987,11 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
             <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required />
           </label>
         ) : null}
+        {type !== "HEARTBEAT" ? (
+          <p className="field-hint">
+            Public URLs only — localhost and private network addresses are blocked.
+          </p>
+        ) : null}
         <div className="form-grid">
           <label>
             Method
@@ -1007,6 +1064,7 @@ function MonitorDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   const query = useQuery({
     queryKey: ["monitor", monitorId],
     queryFn: () => monitorService.get(monitorId),
@@ -1103,12 +1161,17 @@ function MonitorDetail() {
               Run check
             </button>
             <button
-              className="button secondary"
+              className="button danger"
               disabled={remove.isPending}
               onClick={() => {
-                if (confirm(`Delete monitor "${monitor.name}"?`)) {
-                  remove.mutate();
-                }
+                confirmAction({
+                  title: `Delete monitor "${monitor.name}"?`,
+                  message: "Its check history and incidents will remain in reports.",
+                }).then((confirmed) => {
+                  if (confirmed) {
+                    remove.mutate();
+                  }
+                });
               }}
             >
               <Trash2 size={16} />
@@ -1449,13 +1512,14 @@ function AlertChannels({ organization }: { organization?: Organization }) {
           create.mutate();
         }}
       >
-        <input placeholder="Channel name" value={name} onChange={(event) => setName(event.target.value)} required />
-        <select value={type} onChange={(event) => setType(event.target.value as NotificationChannel["channel_type"])}>
+        <input placeholder="Channel name" aria-label="Channel name" value={name} onChange={(event) => setName(event.target.value)} required />
+        <select aria-label="Channel type" value={type} onChange={(event) => setType(event.target.value as NotificationChannel["channel_type"])}>
           <option>EMAIL</option>
           <option>TELEGRAM</option>
         </select>
         <input
           placeholder={type === "EMAIL" ? "alerts@example.com" : "Telegram chat ID"}
+          aria-label={type === "EMAIL" ? "Alert email address" : "Telegram chat ID"}
           value={target}
           onChange={(event) => setTarget(event.target.value)}
           required
@@ -1472,8 +1536,13 @@ function AlertChannels({ organization }: { organization?: Organization }) {
             update.mutate();
           }}
         >
-          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
-          <input value={editTarget} onChange={(event) => setEditTarget(event.target.value)} required />
+          <input aria-label="Channel name" value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input
+            aria-label={editing.channel_type === "EMAIL" ? "Alert email address" : "Telegram chat ID"}
+            value={editTarget}
+            onChange={(event) => setEditTarget(event.target.value)}
+            required
+          />
           <label className="check-label">
             <input type="checkbox" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
             Active
@@ -1517,6 +1586,7 @@ function AlertChannels({ organization }: { organization?: Organization }) {
 function Clients({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
@@ -1577,9 +1647,9 @@ function Clients({ organization }: { organization?: Organization }) {
           create.mutate();
         }}
       >
-        <input placeholder="Client name" value={name} onChange={(event) => setName(event.target.value)} required />
-        <input type="email" placeholder="Contact email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        <input placeholder="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+        <input placeholder="Client name" aria-label="Client name" value={name} onChange={(event) => setName(event.target.value)} required />
+        <input type="email" placeholder="Contact email" aria-label="Contact email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <input placeholder="Notes" aria-label="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
         <button className="button primary">Create</button>
       </form>
       {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
@@ -1593,9 +1663,9 @@ function Clients({ organization }: { organization?: Organization }) {
             update.mutate();
           }}
         >
-          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
-          <input type="email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} />
-          <input value={editNotes} onChange={(event) => setEditNotes(event.target.value)} />
+          <input aria-label="Client name" value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input type="email" aria-label="Contact email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} />
+          <input aria-label="Notes" value={editNotes} onChange={(event) => setEditNotes(event.target.value)} />
           <div className="row-actions">
             <button className="button primary" disabled={update.isPending}>
               {update.isPending ? "Saving..." : "Save"}
@@ -1620,6 +1690,7 @@ function Clients({ organization }: { organization?: Organization }) {
               <button
                 className="icon-button"
                 title="Edit client"
+                aria-label={`Edit client ${client.name}`}
                 onClick={() => {
                   setEditing(client);
                   setEditName(client.name);
@@ -1632,11 +1703,16 @@ function Clients({ organization }: { organization?: Organization }) {
               <button
                 className="icon-button"
                 title="Delete client"
+                aria-label={`Delete client ${client.name}`}
                 disabled={remove.isPending}
                 onClick={() => {
-                  if (confirm(`Delete client "${client.name}"?`)) {
-                    remove.mutate(client.public_id);
-                  }
+                  confirmAction({
+                    title: `Delete client "${client.name}"?`,
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      remove.mutate(client.public_id);
+                    }
+                  });
                 }}
               >
                 <Trash2 size={16} />
@@ -1652,6 +1728,7 @@ function Clients({ organization }: { organization?: Organization }) {
 function StatusPages({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [editing, setEditing] = useState<StatusPage | null>(null);
@@ -1717,6 +1794,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
       >
         <input
           placeholder="Page name"
+          aria-label="Page name"
           value={name}
           onChange={(event) => {
             setName(event.target.value);
@@ -1724,7 +1802,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
           }}
           required
         />
-        <input placeholder="slug" value={slug} onChange={(event) => setSlug(slugify(event.target.value))} required />
+        <input placeholder="slug" aria-label="Slug" value={slug} onChange={(event) => setSlug(slugify(event.target.value))} required />
         <button className="button primary">Create</button>
       </form>
       {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
@@ -1738,8 +1816,8 @@ function StatusPages({ organization }: { organization?: Organization }) {
             update.mutate();
           }}
         >
-          <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
-          <input value={editSlug} onChange={(event) => setEditSlug(slugify(event.target.value))} required />
+          <input aria-label="Page name" value={editName} onChange={(event) => setEditName(event.target.value)} required />
+          <input aria-label="Slug" value={editSlug} onChange={(event) => setEditSlug(slugify(event.target.value))} required />
           <label className="check-label">
             <input type="checkbox" checked={editActive} onChange={(event) => setEditActive(event.target.checked)} />
             Active
@@ -1772,6 +1850,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
                   <button
                     className="icon-button"
                     title="Copy public link"
+                    aria-label={`Copy public link for ${page.name}`}
                     onClick={() => {
                       navigator.clipboard.writeText(publicUrl);
                       notify("Public status link copied.");
@@ -1779,12 +1858,19 @@ function StatusPages({ organization }: { organization?: Organization }) {
                   >
                     <Copy size={16} />
                   </button>
-                  <Link className="icon-button" title="Open public page" to={publicPath} target="_blank">
+                  <Link
+                    className="icon-button"
+                    title="Open public page"
+                    aria-label={`Open public page for ${page.name}`}
+                    to={publicPath}
+                    target="_blank"
+                  >
                     <ExternalLink size={16} />
                   </Link>
                   <button
                     className="icon-button"
                     title="Edit status page"
+                    aria-label={`Edit status page ${page.name}`}
                     onClick={() => {
                       setEditing(page);
                       setEditName(page.name);
@@ -1797,11 +1883,16 @@ function StatusPages({ organization }: { organization?: Organization }) {
                   <button
                     className="icon-button"
                     title="Delete status page"
+                    aria-label={`Delete status page ${page.name}`}
                     disabled={remove.isPending}
                     onClick={() => {
-                      if (confirm(`Delete status page "${page.name}"?`)) {
-                        remove.mutate(page.public_id);
-                      }
+                      confirmAction({
+                        title: `Delete status page "${page.name}"?`,
+                      }).then((confirmed) => {
+                        if (confirmed) {
+                          remove.mutate(page.public_id);
+                        }
+                      });
                     }}
                   >
                     <Trash2 size={16} />
@@ -1828,6 +1919,7 @@ function StatusPages({ organization }: { organization?: Organization }) {
 function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Monitor[] }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   const [monitorId, setMonitorId] = useState("");
   const services = useQuery({
     queryKey: ["status-page-services", page.public_id],
@@ -1894,11 +1986,16 @@ function StatusPageServices({ page, monitors }: { page: StatusPage; monitors: Mo
               <button
                 className="icon-button"
                 title="Remove service"
+                aria-label={`Remove ${service.display_name} from ${page.name}`}
                 disabled={removeService.isPending}
                 onClick={() => {
-                  if (confirm(`Remove "${service.display_name}" from ${page.name}?`)) {
-                    removeService.mutate(service.public_id);
-                  }
+                  confirmAction({
+                    title: `Remove "${service.display_name}" from ${page.name}?`,
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      removeService.mutate(service.public_id);
+                    }
+                  });
                 }}
               >
                 <Trash2 size={16} />
@@ -2094,6 +2191,9 @@ function PublicStatusPage() {
               <EmptyInline text="No public services are configured." />
             )}
           </section>
+          <footer className="public-footer">
+            Powered by <Link to="/">WATCHDOG</Link>
+          </footer>
         </section>
       ) : null}
     </main>
@@ -2103,6 +2203,7 @@ function PublicStatusPage() {
 function ChannelActions({ channel, onEdit }: { channel: NotificationChannel; onEdit: () => void }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const confirmAction = useConfirm();
   const test = useMutation({
     mutationFn: () => alertChannelService.test(channel.id),
     onSuccess: () => notify(`Test alert queued for ${channel.name}.`),
@@ -2116,35 +2217,36 @@ function ChannelActions({ channel, onEdit }: { channel: NotificationChannel; onE
   });
   return (
     <div className="row-actions">
-      <button className="icon-button" title="Send test alert" disabled={test.isPending} onClick={() => test.mutate()}>
+      <button
+        className="icon-button"
+        title="Send test alert"
+        aria-label={`Send test alert to ${channel.name}`}
+        disabled={test.isPending}
+        onClick={() => test.mutate()}
+      >
         <Bell size={16} />
       </button>
-      <button className="icon-button" title="Edit channel" onClick={onEdit}>
+      <button className="icon-button" title="Edit channel" aria-label={`Edit channel ${channel.name}`} onClick={onEdit}>
         <Pencil size={16} />
       </button>
       <button
         className="icon-button"
         title="Delete channel"
+        aria-label={`Delete channel ${channel.name}`}
         disabled={remove.isPending}
         onClick={() => {
-          if (confirm(`Delete alert channel "${channel.name}"?`)) {
-            remove.mutate();
-          }
+          confirmAction({
+            title: `Delete alert channel "${channel.name}"?`,
+          }).then((confirmed) => {
+            if (confirmed) {
+              remove.mutate();
+            }
+          });
         }}
       >
         <Trash2 size={16} />
       </button>
     </div>
-  );
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <section className="empty-state">
-      <SquareChartGantt size={36} />
-      <h1>{title}</h1>
-      <p>This UI section is reserved for the next backend milestone.</p>
-    </section>
   );
 }
 
@@ -2285,22 +2387,24 @@ function TableSkeleton() {
 export function App() {
   return (
     <NotificationProvider>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/status/:slug" element={<PublicStatusPage />} />
-        <Route path="/login" element={<AuthPage mode="login" />} />
-        <Route path="/register" element={<AuthPage mode="register" />} />
-        <Route path="/forgot-password" element={<PasswordResetPage />} />
-        <Route
-          path="/app/*"
-          element={
-            <RequireAuth>
-              <Shell />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ConfirmProvider>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/status/:slug" element={<PublicStatusPage />} />
+          <Route path="/login" element={<AuthPage mode="login" />} />
+          <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/forgot-password" element={<PasswordResetPage />} />
+          <Route
+            path="/app/*"
+            element={
+              <RequireAuth>
+                <Shell />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ConfirmProvider>
     </NotificationProvider>
   );
 }

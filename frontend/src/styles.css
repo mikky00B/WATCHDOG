@@ -97,6 +97,22 @@ button {
   color: #174ea6;
 }
 
+.button.inverse {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.94);
+  color: #174ea6;
+}
+
+.button.danger {
+  border-color: #fecaca;
+  background: #fff1f1;
+  color: #b91c1c;
+}
+
+.button.danger:hover {
+  background: #fee2e2;
+}
+
 .button.compact {
   min-height: 32px;
   padding: 0 10px;
@@ -115,22 +131,22 @@ button {
 .landing {
   min-height: 100vh;
   background:
-    linear-gradient(120deg, rgba(37, 99, 235, 0.9), rgba(13, 148, 136, 0.84)),
-    url("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1800&q=80");
-  background-size: cover;
-  background-position: center;
+    radial-gradient(1000px 520px at 85% -10%, rgba(13, 148, 136, 0.55), transparent 65%),
+    radial-gradient(900px 480px at -10% 110%, rgba(13, 148, 136, 0.4), transparent 60%),
+    linear-gradient(120deg, #1d4ed8, #2563eb 55%, #0d9488);
   color: #ffffff;
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.7fr);
-  gap: 36px;
-  align-items: center;
   max-width: 1180px;
   min-height: calc(100vh - 88px);
   margin: 0 auto;
   padding: 32px 24px 96px;
+}
+
+.hero-copy {
+  max-width: 760px;
+  padding-top: clamp(80px, 14vh, 180px);
 }
 
 .hero-copy h1 {
@@ -156,29 +172,6 @@ button {
 
 .landing .eyebrow {
   color: #d8f7ff;
-}
-
-.hero-panel {
-  display: grid;
-  gap: 14px;
-}
-
-.signal-row {
-  display: grid;
-  grid-template-columns: 42px 1fr;
-  gap: 14px;
-  align-items: center;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(14px);
-}
-
-.signal-row span {
-  display: block;
-  margin-top: 4px;
-  color: #e5f5ff;
 }
 
 .auth-shell {
@@ -422,6 +415,10 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.page-actions .button.danger {
+  margin-left: auto;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -561,10 +558,34 @@ textarea {
 }
 
 .form-panel.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
   max-width: none;
-  grid-template-columns: 1fr 160px 1fr auto;
-  align-items: end;
   margin-bottom: 18px;
+}
+
+.form-panel.inline-form > input {
+  flex: 1 1 200px;
+  width: auto;
+}
+
+.form-panel.inline-form > select {
+  flex: 0 1 170px;
+  width: auto;
+}
+
+.form-panel.inline-form > .button {
+  flex: 0 0 auto;
+}
+
+.form-panel.inline-form > label {
+  flex: 0 0 auto;
+}
+
+.form-panel.inline-form > .row-actions {
+  margin-left: auto;
 }
 
 .edit-strip {
@@ -836,6 +857,84 @@ tr:last-child td {
   font-weight: 700;
 }
 
+.field-hint {
+  margin: -8px 0 0;
+  color: #6b7890;
+  font-size: 13px;
+}
+
+.cta-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  border: 1px dashed #b9cdf2;
+  border-radius: 8px;
+  background: #f4f8ff;
+  padding: 16px 18px;
+}
+
+.cta-panel h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.cta-panel p {
+  margin: 0;
+  color: #5f6d84;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(23, 32, 51, 0.45);
+}
+
+.modal {
+  display: grid;
+  gap: 14px;
+  width: min(440px, 100%);
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(20, 33, 61, 0.28);
+  padding: 20px;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal p {
+  margin: 0;
+  color: #5f6d84;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.public-footer {
+  margin: 28px auto 0;
+  color: #6b7890;
+  font-size: 14px;
+  text-align: center;
+}
+
+.public-footer a {
+  color: #2563eb;
+  font-weight: 700;
+}
+
 .toast-stack {
   position: fixed;
   right: 18px;
@@ -909,7 +1008,6 @@ tr:last-child td {
 }
 
 @media (max-width: 980px) {
-  .hero,
   .two-column {
     grid-template-columns: 1fr;
   }
@@ -973,7 +1071,17 @@ tr:last-child td {
   }
 
   .form-panel.inline-form {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-panel.inline-form > input,
+  .form-panel.inline-form > select {
+    width: 100%;
+  }
+
+  .form-panel.inline-form > .row-actions {
+    margin-left: 0;
   }
 
   .management-grid {
@@ -1051,14 +1159,21 @@ tr:last-child td {
     padding-bottom: 48px;
   }
 
+  .hero-copy {
+    padding-top: 48px;
+  }
+
   .hero-copy p {
     font-size: 18px;
   }
 
-  .metric-grid,
   .form-grid,
   .side-nav {
     grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .bar-row,

@@ -33,6 +33,36 @@ type RequestOptions = {
   auth?: boolean;
 };
 
+function extractErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const detail = (payload as { detail?: unknown; message?: unknown }).detail;
+  const message = (payload as { message?: unknown }).message;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  // FastAPI 422 validation errors return detail as an array of {loc, msg} objects
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (item && typeof item === "object" && typeof (item as { msg?: unknown }).msg === "string") {
+          const loc = Array.isArray((item as { loc?: unknown[] }).loc)
+            ? (item as { loc: unknown[] }).loc.slice(1).join(".")
+            : "";
+          return loc ? `${(item as { msg: string }).msg} (${loc})` : (item as { msg: string }).msg;
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+    return parts.length ? parts.join("; ") : null;
+  }
+  if (typeof message === "string") {
+    return message;
+  }
+  return null;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -54,13 +84,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const message =
-      typeof payload?.detail === "string"
-        ? payload.detail
-        : typeof payload?.message === "string"
-          ? payload.message
-          : "Request failed";
-    throw new Error(message);
+    throw new Error(extractErrorMessage(payload) ?? "Request failed");
   }
 
   if (payload && typeof payload === "object" && "data" in payload) {
