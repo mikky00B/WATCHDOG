@@ -80,7 +80,7 @@ jobs:
             echo "Building frontend..."
             cd frontend
 
-            printf '%s\\n' \
+            printf '%s\n' \
               'VITE_API_BASE_URL=/api/v1' \
               'VITE_APP_NAME=WATCHDOG' \
               > .env
