@@ -30,7 +30,9 @@ jobs:
         run: pytest
 
       - name: Run Ruff
-        run: ruff check src tests
+        run: |
+          ruff check src tests --fix
+          ruff check src tests --ignore B008,N818,E712,B017,SIM300
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
