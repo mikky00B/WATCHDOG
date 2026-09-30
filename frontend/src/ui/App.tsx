@@ -223,33 +223,196 @@ function useOrganizations() {
   return { ...query, organizations, selected };
 }
 
+const lpFeatures = [
+  {
+    icon: MonitorCheck,
+    title: "Uptime & API checks",
+    text: "HTTP checks against any URL with expected status codes, latency thresholds, and intervals that suit the job — from every 60 seconds upward.",
+  },
+  {
+    icon: RadioTower,
+    title: "Heartbeats for cron jobs",
+    text: "Get a unique URL, ping it from your scheduled jobs, and we raise the alarm when a backup or worker silently never runs.",
+  },
+  {
+    icon: AlertTriangle,
+    title: "Incidents with receipts",
+    text: "Every failure opens an incident with the reason, duration, and an acknowledge/resolve trail — so post-mortems write themselves.",
+  },
+  {
+    icon: SquareChartGantt,
+    title: "Client-ready reporting",
+    text: "Monthly reliability summaries per client, plus public status pages your customers can check instead of calling you.",
+  },
+];
+
+const lpSteps = [
+  {
+    num: "01",
+    title: "Add a monitor",
+    text: "Paste any URL, pick an interval, done. Heartbeat monitors for cron jobs get their own ping URL.",
+  },
+  {
+    num: "02",
+    title: "We keep watch",
+    text: "WATCHDOG checks every target on schedule, tracks latency, and opens incidents the moment a check fails.",
+  },
+  {
+    num: "03",
+    title: "You hear it first",
+    text: "Alert channels over email and Telegram fan out the moment something breaks — with the reason attached.",
+  },
+];
+
 function LandingPage() {
   return (
-    <main className="landing">
-      <nav className="topbar">
-        <Link className="brand" to="/">
-          <LogoMark size={26} mono />
-          WATCHDOG
-        </Link>
-        <div className="nav-actions">
-          <Link className="button inverse" to="/login">
-            Login
+    <div className="landing-page">
+      <div className="landing">
+        <nav className="topbar">
+          <Link className="brand" to="/">
+            <LogoMark size={26} mono />
+            WATCHDOG
           </Link>
-        </div>
-      </nav>
-      <section className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">Uptime, API, and cron-job monitoring</span>
-          <h1>WATCHDOG</h1>
-          <p>Monitor websites, APIs, and scheduled jobs before downtime turns into client messages.</p>
-          <div className="hero-actions">
-            <Link className="button primary" to="/register">
+          <div className="nav-actions">
+            <Link to="/login">Log in</Link>
+            <Link className="button inverse" to="/register">
               Create account
             </Link>
           </div>
+        </nav>
+        <section className="hero">
+          <div className="hero-copy">
+            <span className="eyebrow">Uptime, API, and cron-job monitoring</span>
+            <h1>Know it&apos;s down before your clients do.</h1>
+            <p>
+              WATCHDOG checks your websites, APIs, and scheduled jobs every minute and alerts
+              you the moment something breaks — built for agencies that run the internet for
+              other people.
+            </p>
+            <div className="hero-actions">
+              <Link className="button primary lg" to="/register">
+                Start monitoring free
+              </Link>
+              <a className="button inverse lg" href="#features">
+                See how it works
+              </a>
+            </div>
+            <ul className="hero-points">
+              <li>
+                <CheckCircle2 size={15} /> 60-second checks
+              </li>
+              <li>
+                <CheckCircle2 size={15} /> Email &amp; Telegram alerts
+              </li>
+              <li>
+                <CheckCircle2 size={15} /> Client-ready status pages
+              </li>
+            </ul>
+          </div>
+          <div className="hero-shot">
+            <div className="browser-frame">
+              <div className="browser-bar">
+                <span className="dot red" />
+                <span className="dot amber" />
+                <span className="dot green" />
+                <span className="url-pill">app.watchdog.dev/overview</span>
+              </div>
+              <img
+                src="/screenshots/dashboard-overview.png"
+                alt="WATCHDOG dashboard showing monitor stats, activity, and an open incident"
+              />
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section className="lp-features" id="features">
+        <span className="eyebrow">Everything in one place</span>
+        <h2>Built for the way agencies run uptime</h2>
+        <div className="lp-grid">
+          {lpFeatures.map((feature) => (
+            <article className="lp-card" key={feature.title}>
+              <feature.icon size={22} />
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </article>
+          ))}
         </div>
       </section>
-    </main>
+
+      <section className="lp-showcase">
+        <div className="lp-showcase-copy">
+          <span className="eyebrow">Incidents &amp; alerting</span>
+          <h2>Downtime becomes a quick fix, not a Monday surprise</h2>
+          <p>
+            Monitors are grouped by client, checked on schedule, and every failure is tracked
+            to resolution. Your team sees the same truth your status page shows.
+          </p>
+          <ul>
+            <li>
+              <CheckCircle2 size={16} /> Failures open incidents automatically
+            </li>
+            <li>
+              <CheckCircle2 size={16} /> Alert channels fan out to email and Telegram
+            </li>
+            <li>
+              <CheckCircle2 size={16} /> Acknowledge and resolve with one click
+            </li>
+          </ul>
+        </div>
+        <div className="lp-showcase-shot">
+          <div className="browser-frame">
+            <div className="browser-bar">
+              <span className="dot red" />
+              <span className="dot amber" />
+              <span className="dot green" />
+              <span className="url-pill">app.watchdog.dev/monitors</span>
+            </div>
+            <img
+              src="/screenshots/dashboard-monitors.png"
+              alt="WATCHDOG monitor list showing UP and DOWN statuses per client site"
+              loading="lazy"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="lp-steps">
+        <span className="eyebrow">How it works</span>
+        <h2>Live in three minutes</h2>
+        <ol className="lp-steps-grid">
+          {lpSteps.map((step) => (
+            <li className="lp-step" key={step.num}>
+              <span className="num">{step.num}</span>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="lp-cta">
+        <div className="lp-cta-panel">
+          <h2>Your clients are sleeping. Their sites shouldn&apos;t be.</h2>
+          <p>Set up your first monitor before your coffee cools.</p>
+          <Link className="button inverse lg" to="/register">
+            Create your account
+          </Link>
+        </div>
+      </section>
+
+      <footer className="lp-footer">
+        <Link className="brand" to="/">
+          <LogoMark size={20} />
+          WATCHDOG
+        </Link>
+        <nav>
+          <Link to="/login">Log in</Link>
+          <Link to="/register">Create account</Link>
+        </nav>
+        <small>© {new Date().getFullYear()} WATCHDOG. All rights reserved.</small>
+      </footer>
+    </div>
   );
 }
 
