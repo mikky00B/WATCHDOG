@@ -144,6 +144,14 @@ export const monitorService = {
   },
 };
 
+export const checkService = {
+  recent(organizationId: string, limit?: number) {
+    return apiRequest<ListResponse<CheckResult, "results">>(
+      `/checks/recent${makeQuery({ organization_id: organizationId, limit })}`,
+    );
+  },
+};
+
 export const clientService = {
   list(organizationId: string) {
     return apiRequest<ListResponse<Client, "clients">>(`/organizations/${organizationId}/clients`);

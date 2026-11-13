@@ -37,6 +37,7 @@ import {
   alertChannelService,
   alertService,
   analyticsService,
+  checkService,
   apiKeyService,
   authService,
   clientService,
@@ -938,16 +939,34 @@ function Overview({ organization }: { organization: Organization }) {
     queryKey: ["incidents", organization.public_id],
     queryFn: () => incidentService.list(organization.public_id),
   });
+  const recentChecks = useQuery({
+    queryKey: ["recent-checks", organization.public_id],
+    queryFn: () => checkService.recent(organization.public_id, 300),
+  });
   const data = stats.data;
   const failedRate = data?.total_checks ? Math.round((data.failed_checks / data.total_checks) * 100) : 0;
-  const chartData = useMemo(
-    () =>
-      (monitors.data?.monitors ?? []).slice(0, 8).map((monitor, index) => ({
-        name: monitor.name,
-        checks: Math.max(1, monitor.consecutive_successes + monitor.consecutive_failures + index),
-      })),
-    [monitors.data],
-  );
+  const chartData = useMemo(() => {
+    const nameById = new Map<number, string>();
+    for (const monitor of monitors.data?.monitors ?? []) {
+      nameById.set(monitor.id, monitor.name);
+    }
+    const counts = new Map<number, { checks: number; failures: number }>();
+    for (const check of recentChecks.data?.results ?? []) {
+      const entry = counts.get(check.monitor_id) ?? { checks: 0, failures: 0 };
+      entry.checks += 1;
+      if (!check.success) entry.failures += 1;
+      counts.set(check.monitor_id, entry);
+    }
+    return [...counts.entries()]
+      .map(([monitorId, value]) => ({
+        name: nameById.get(monitorId) ?? `Monitor #${monitorId}`,
+        checks: value.checks,
+        failures: value.failures,
+      }))
+      .sort((a, b) => b.checks - a.checks)
+      .slice(0, 8);
+  }, [recentChecks.data, monitors.data]);
+  const maxChecks = Math.max(1, ...chartData.map((item) => item.checks));
 
   return (
     <section>
@@ -983,9 +1002,12 @@ function Overview({ organization }: { organization: Organization }) {
                 <div className="bar-chart">
                   {chartData.map((item) => (
                     <div key={item.name} className="bar-row">
-                      <span>{item.name}</span>
+                      <span>
+                        {item.name}
+                        {item.failures ? ` · ${item.failures} failed` : ""}
+                      </span>
                       <div>
-                        <i style={{ width: `${Math.min(100, item.checks * 14)}%` }} />
+                        <i style={{ width: `${(item.checks / maxChecks) * 100}%` }} />
                       </div>
                     </div>
                   ))}
@@ -1024,28 +1046,30 @@ function MonitorList({ organization }: { organization?: Organization }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [environmentFilter, setEnvironmentFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
-  if (!organization) {
-    return <EmptyOrganizations />;
-  }
-
+  // Hooks must run unconditionally: the query stays registered even when no
+  // organization is selected yet, otherwise React throws "rendered more hooks".
   const query = useQuery({
     queryKey: ["monitors", organization?.public_id, typeFilter, statusFilter, environmentFilter, tagFilter],
     queryFn: () =>
-      monitorService.list(organization.public_id, {
+      monitorService.list(organization!.public_id, {
         monitor_type: typeFilter || undefined,
         status: statusFilter || undefined,
         environment: environmentFilter || undefined,
         tag: tagFilter || undefined,
       }),
+    enabled: Boolean(organization),
   });
   const remove = useMutation({
     mutationFn: (id: string) => monitorService.remove(id),
     onSuccess: (_data, id) => {
-      const monitor = monitors.find((item) => item.public_id === id);
+      const monitor = (query.data?.monitors ?? []).find((item) => item.public_id === id);
       queryClient.invalidateQueries({ queryKey: ["monitors"] });
       notify(`${monitor?.name ?? "Monitor"} deleted.`);
     },
   });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
   const monitors = query.data?.monitors ?? [];
 
   return (
@@ -1613,7 +1637,7 @@ function MonitorDetail() {
             {monitor.ssl_expires_at ? (
               <section className="panel">
                 <h2>SSL certificate</h2>
-                <div className="metric-grid">
+                <div className="metric-grid auto-fit">
                   <Metric
                     label="Expires"
                     value={formatDate(monitor.ssl_expires_at)}
@@ -2806,12 +2830,22 @@ function MaintenancePage({ organization }: { organization?: Organization }) {
           headers={["Title", "State", "Starts", "Ends", "Monitors", ""]}
           rows={windows.map((window) => [
             window.title,
-            <span className={windowState(window) === "IN_PROGRESS" ? "status warn" : "status"}>
+            <span
+              className={
+                windowState(window) === "IN_PROGRESS"
+                  ? "status warn"
+                  : windowState(window) === "SCHEDULED"
+                    ? "status info"
+                    : "status"
+              }
+            >
               {windowState(window)}
             </span>,
             formatDate(window.starts_at),
             formatDate(window.ends_at),
-            window.monitor_ids.length ? `${window.monitor_ids.length} monitor(s)` : "Whole workspace",
+            window.monitor_ids.length
+              ? `${window.monitor_ids.length} monitor${window.monitor_ids.length === 1 ? "" : "s"}`
+              : "Whole workspace",
             <div className="row-actions">
               <button
                 className="icon-button"
@@ -2881,7 +2915,7 @@ function LogsPage({ organization }: { organization?: Organization }) {
         <div className="metric-grid">
           <Metric label="Log lines (24h)" value={statsData.total} icon={ScrollText} />
           <Metric label="Errors" value={statsData.error_count} icon={AlertTriangle} tone={statsData.error_count ? "bad" : "ok"} />
-          <Metric label="Applications" value={Object.keys(statsData.errors_by_application).length || "—"} icon={Server} />
+          <Metric label="Applications" value={statsData.applications || "—"} icon={Server} />
           <Metric label="Debug/Info" value={(statsData.by_level.INFO ?? 0) + (statsData.by_level.DEBUG ?? 0)} icon={CheckCircle2} tone="ok" />
         </div>
       ) : null}
@@ -3092,7 +3126,7 @@ function ApiKeysPage({ organization }: { organization?: Organization }) {
             key.name,
             <code>{key.key_prefix}…</code>,
             key.scopes?.length ? key.scopes.join(", ") : "all",
-            formatDate(key.expires_at ?? null),
+            formatDate(key.last_used_at),
             <span className={key.expires_at && new Date(key.expires_at) < new Date() ? "status bad" : "status ok"}>
               {key.expires_at && new Date(key.expires_at) < new Date() ? "EXPIRED" : "ACTIVE"}
             </span>,
@@ -3322,7 +3356,16 @@ function TracesPage({ organization }: { organization?: Organization }) {
     }
     return depth;
   };
-  const maxSpanMs = Math.max(1, ...spans.map((span) => span.duration_ms ?? 0));
+  // Position each bar where the span actually started inside the trace window.
+  const traceStartMs = spans.length
+    ? Math.min(...spans.map((span) => new Date(span.start_time).getTime()))
+    : 0;
+  const traceEndMs = spans.length
+    ? Math.max(
+        ...spans.map((span) => new Date(span.end_time || span.start_time).getTime()),
+      )
+    : 1;
+  const traceWindowMs = Math.max(1, traceEndMs - traceStartMs);
 
   return (
     <section>
@@ -3390,7 +3433,12 @@ function TracesPage({ organization }: { organization?: Organization }) {
                 <div className="waterfall-track">
                   <div
                     className={`waterfall-bar ${span.status === "ERROR" ? "bad" : "ok"}`}
-                    style={{ width: `${Math.max(4, ((span.duration_ms ?? 0) / maxSpanMs) * 100)}%` }}
+                    style={{
+                      marginLeft: `${
+                        ((new Date(span.start_time).getTime() - traceStartMs) / traceWindowMs) * 100
+                      }%`,
+                      width: `${Math.max(2, ((span.duration_ms ?? 0) / traceWindowMs) * 100)}%`,
+                    }}
                     title={`${Math.round(span.duration_ms ?? 0)} ms`}
                   />
                 </div>
@@ -3560,7 +3608,7 @@ function SlosPage({ organization }: { organization?: Organization }) {
             </div>
             <p className="field-hint">
               Target {slo.target_percentage}% over {slo.window_days} days
-              {attained != null ? ` · attained ${attained}%` : ""}
+              {attained != null ? ` · attained ${attained.toFixed(2)}%` : ""}
               {status ? ` · ${status.total_checks} checks` : ""}
             </p>
             {remaining != null ? (

@@ -78,6 +78,7 @@ class LogStatsResponse(BaseModel):
     total: int
     by_level: dict[str, int]
     error_count: int
+    applications: int
     volume: list[LogVolumeBucket]
     errors_by_application: dict[str, int]
 

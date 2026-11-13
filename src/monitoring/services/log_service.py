@@ -218,10 +218,17 @@ class LogService:
             for index, values in sorted(buckets.items())
         ]
 
+        distinct_applications = (
+            await self.db.execute(
+                select(func.count(func.distinct(LogEntry.application))).where(*base_filters),
+            )
+        ).scalar() or 0
+
         return {
             "total": total,
             "by_level": by_level,
             "error_count": by_level.get("ERROR", 0) + by_level.get("CRITICAL", 0),
+            "applications": distinct_applications,
             "volume": volume,
             "errors_by_application": errors_by_application,
         }

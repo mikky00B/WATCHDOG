@@ -264,6 +264,7 @@ export type ApiKey = {
   name: string;
   key_prefix: string;
   scopes: ApiKeyScope[] | null;
+  last_used_at: string | null;
   expires_at: string | null;
   created_at: string;
 };
@@ -305,6 +306,7 @@ export type LogStats = {
   total: number;
   by_level: Record<string, number>;
   error_count: number;
+  applications: number;
   volume: LogVolumePoint[];
   errors_by_application: Record<string, number>;
 };

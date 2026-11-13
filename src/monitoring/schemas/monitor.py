@@ -187,10 +187,36 @@ class MonitorUpdate(BaseModel):
         return normalized or None
 
 
-class MonitorResponse(MonitorBase):
-    """Schema for monitor response."""
+class MonitorResponse(BaseModel):
+    """Schema for monitor responses.
+
+    Deliberately standalone (not inheriting MonitorBase): response validation
+    must not apply create-side field constraints, so legitimately stored values
+    such as interval_seconds=86400 (daily SSL checks) serialize correctly.
+    """
 
     model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    url: str | None = None
+    monitor_type: str
+    http_method: str | None = None
+    expected_status_code: int | None = None
+    expected_response_text: str | None = None
+    expected_json: dict[str, object] | None = None
+    expected_headers: dict[str, str] | None = None
+    request_headers: dict[str, str] | None = None
+    request_body: str | None = None
+    interval_seconds: int
+    timeout_seconds: float | None = None
+    response_time_threshold_ms: int | None = None
+    enabled: bool = True
+    environment: str | None = None
+    tags: list[str] | None = None
+    port: int | None = None
+    record_type: str | None = None
+    expected_values: list[object] | None = None
+    ssl_expiry_threshold_days: int | None = None
 
     id: int
     public_id: uuid.UUID

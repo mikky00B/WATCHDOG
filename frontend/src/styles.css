@@ -4,6 +4,7 @@
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #172033;
   background: #f6f8fb;
+  line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -905,7 +906,9 @@ code {
 table {
   width: 100%;
   min-width: 860px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14.5px;
 }
 
 th,
@@ -1010,8 +1013,78 @@ th {
   text-transform: uppercase;
 }
 
+/* ── Table polish: depth, zebra, hover, defined header ──────────────── */
+.table-wrap {
+  border: 1px solid #dfe7f1;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(16, 34, 62, 0.04),
+    0 6px 20px rgba(16, 34, 62, 0.06);
+}
+
+thead th {
+  background: #f5f8fc;
+  border-bottom: 1px solid #e2e9f3;
+  color: #5a6880;
+  font-size: 11.5px;
+  letter-spacing: 0.07em;
+  padding: 12px 16px;
+}
+
+tbody td {
+  border-bottom: 1px solid #eef2f8;
+}
+
+tbody tr {
+  transition: background 0.15s ease;
+}
+
+tbody tr:nth-child(even) {
+  background: #fafcfe;
+}
+
+tbody tr:hover {
+  background: #f0f5fd;
+}
+
+.row-actions .icon-button {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+tbody tr:hover .row-actions .icon-button,
+.row-actions .icon-button:focus-visible {
+  opacity: 1;
+}
+
+.list-row {
+  transition: background 0.15s ease;
+}
+
+a.list-row:hover {
+  background: #f4f8fd;
+}
+
 tr:last-child td {
   border-bottom: 0;
+}
+
+/* Data reads better with aligned digits: metrics, tables, timestamps, badges. */
+.metric strong,
+td,
+.cell-value,
+.list-row strong,
+.list-row span,
+.status,
+.raw-key {
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 .status {
@@ -1525,13 +1598,42 @@ tr:last-child td {
 .filter-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin: 14px 0;
 }
 
+/* Global inputs are width:100%; scope that away so filters share one row. */
 .filter-row input,
 .filter-row select {
-  min-width: 160px;
+  width: auto;
+  flex: 0 1 240px;
+  min-width: 140px;
+  margin: 0;
+}
+
+.filter-row .button {
+  flex: 0 0 auto;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.status.info {
+  background: #e8f0fe;
+  color: #2563eb;
+}
+
+/* Metric cards inside half-width panels would squeeze into 130px columns. */
+.metric-grid.auto-fit {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .field-group {
