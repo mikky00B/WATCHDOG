@@ -1,16 +1,31 @@
-# WATCHDOG Monitoring Platform
+# WATCHDOG
 
-WATCHDOG is a FastAPI and React monitoring platform for agencies and teams that need uptime checks (HTTP, SSL certificates, DNS records, TCP ports), heartbeat checks, incidents, maintenance windows, client grouping, alert channels, status pages, monthly reliability reports, centralized log ingestion, infrastructure metrics from a lightweight agent, distributed traces (OTLP/JSON), SLO tracking, and reusable dashboards.
+Uptime, log, and infrastructure monitoring for agencies and development teams.
 
+WATCHDOG watches your websites, APIs, SSL certificates, DNS records, TCP ports, and cron jobs — opens incidents when things break, alerts you through email and Telegram, publishes public status pages, ingests application logs and host metrics, and tracks SLOs. Built with FastAPI, PostgreSQL, and React.
 
-## Requirements
+**What it does**
 
-- Python 3.11+
-- Node.js 20+
-- npm
-- PostgreSQL
+- **Monitors** — HTTP checks with status/keyword/JSON/header/response-time assertions, SSL certificate expiry, DNS record resolution, TCP port connectivity, and heartbeat push check-ins for cron jobs. Checks run on an in-process scheduler with retries, rate limiting, and SSRF protection.
+- **Incidents & alerts** — failures above a threshold open incidents with an acknowledge/resolve trail; alerts fan out through email, Telegram, and webhook channels with cooldown deduplication. Threshold, error-rate, uptime, latency-anomaly, and SSL-expiry rules run automatically.
+- **Maintenance windows** — scheduled windows pause checks, incidents, and heartbeat misses for covered monitors, and appear on public status pages.
+- **Log management** — applications ship structured logs to an authenticated ingestion API; secrets are redacted before storage, logs are searchable, and volume/error charts are served for dashboards. Retention is automatic.
+- **Infrastructure monitoring** — a lightweight Linux agent (`agent/`) reports CPU, memory, disk, network, processes, and service status; per-host thresholds raise deduplicated alerts.
+- **Tracing** — accepts OTLP/JSON spans from OpenTelemetry SDKs; browse traces as span waterfalls and derive a service dependency map.
+- **SLOs** — error-budget tracking per monitor computed from check results.
+- **Dashboards & reports** — reusable widget dashboards, historical latency/uptime charts, service health overview, correlated incident timelines, and monthly client reliability reports.
 
-## Backend Setup
+## Tech Stack
+
+- **Backend:** Python 3.11, FastAPI, SQLAlchemy 2 (async), PostgreSQL (asyncpg), Alembic, httpx, structlog, dnspython
+- **Frontend:** React 19, TypeScript, Vite, TanStack Query, React Router, Recharts
+- **Agent:** Python 3.8+ with psutil only
+
+## Quick Start
+
+Prerequisites: Python 3.11+, Node.js 20+, npm, PostgreSQL.
+
+### Backend
 
 ```powershell
 python -m venv venv
@@ -20,37 +35,30 @@ pip install -e .
 Copy-Item .env.example .env
 ```
 
-Set your local database URL in `.env`:
+Set your database URL in `.env`:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/monitoring
 ```
 
-Apply migrations:
+Create the schema and start the API:
 
 ```powershell
 python -m alembic upgrade head
-```
-
-Alembic is the schema bootstrap path for every environment. A fresh PostgreSQL
-database must be fully created by `python -m alembic upgrade head`; production
-does not rely on `Base.metadata.create_all()`.
-
-Start the API:
-
-```powershell
 uvicorn monitoring.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Backend URLs:
+Alembic is the only schema bootstrap path — a fresh database must be fully created by `alembic upgrade head`; the app does not rely on `create_all()`.
 
-- API: http://127.0.0.1:8000
-- Docs: http://127.0.0.1:8000/docs
-- Health: http://127.0.0.1:8000/health
+The API process also starts the monitor scheduler and notification worker, so no separate worker is needed for local development.
 
-The API process starts both the monitor scheduler and notification worker. You do not need to start a separate worker for local development.
+| URL | |
+|---|---|
+| API | http://127.0.0.1:8000 |
+| Swagger docs | http://127.0.0.1:8000/docs |
+| Health | http://127.0.0.1:8000/health |
 
-## Frontend Setup
+### Frontend
 
 ```powershell
 cd frontend
@@ -58,488 +66,213 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Frontend URL:
+Dashboard: http://127.0.0.1:5173
 
-- http://127.0.0.1:5173
-
-The frontend uses Vite with a local proxy. `frontend/.env` should contain:
+`frontend/.env` should contain:
 
 ```env
 VITE_API_BASE_URL=/api/v1
 VITE_APP_NAME=WATCHDOG
 ```
 
-If Vite fails with `spawn EPERM` on Windows, start the dev server from a normal terminal outside restricted tooling:
+The Vite dev server proxies `/api` to the backend.
 
-```powershell
-cd frontend
-npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
-```
+### First run
 
-## Environment Configuration
+1. Register at `/register` and verify your email with the six-digit code.
+2. Create an organization — this is your workspace.
+3. Add monitors (website, API, SSL, DNS, TCP, or heartbeat) with environments and tags.
+4. Add an alert channel (email or Telegram) so failures reach you.
+5. Create an API key under **API Keys** — it authenticates log, metric, and trace ingestion.
+6. Optional: add clients (per-customer grouping), a status page, SLOs, and maintenance windows.
 
-Common backend `.env` values:
+## Configuration
+
+Key `.env` values (see `.env.example` for the full set):
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/monitoring
-API_HOST=0.0.0.0
-API_PORT=8000
 ENVIRONMENT=development
-AUTO_CREATE_TABLES=false
 JWT_SECRET_KEY=change-this-to-a-long-random-secret
 
-CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","http://localhost:8000","http://127.0.0.1:8000"]
+CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 
 DEFAULT_CHECK_INTERVAL=60
-DEFAULT_TIMEOUT=5.0
 MAX_CONCURRENT_CHECKS=100
 REQUESTS_PER_MINUTE_PER_SITE=10
-MAX_CHECK_RETRIES=2
 RUN_SCHEDULER_IN_API=true
 
 EMAIL_ENABLED=true
-RESENT_API_KEY=re_your_resend_api_key
-FROM_EMAIL=michael@example.com
-FROM_NAME="Michael from Watchdog"
+RESEND_API_KEY=re_your_resend_api_key
+FROM_EMAIL=alerts@yourdomain.com
 
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
-TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/integrations/telegram/webhook
-TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
+TELEGRAM_ALLOWED_CHAT_IDS=123456789
 
 LOG_LEVEL=INFO
-# Retention (days) for ingested observability data — purged by the scheduler
 LOG_RETENTION_DAYS=30
 HOST_METRIC_RETENTION_DAYS=14
 TRACE_RETENTION_DAYS=7
 ```
 
-Email notes:
+Notes:
 
-- WATCHDOG sends email through Resend's HTTP API.
-- `RESENT_API_KEY` is supported because it is the current project env name. `RESEND_API_KEY` also works.
-- `FROM_EMAIL` must be a Resend-verified sender/domain.
-- Verification and password-reset emails use a transactional template, not the monitor-alert template.
-- Alert recipients come from Alert Channels, not from `.env`.
+- Email is sent through Resend's HTTP API. `RESENT_API_KEY` is also accepted as a legacy alias. `FROM_EMAIL` must be a Resend-verified sender. Alert recipients come from alert channels, not from `.env`.
+- `ENVIRONMENT=production` refuses the default development `JWT_SECRET_KEY` — set a long random secret before deploying, and keep `AUTO_CREATE_TABLES=false` (run `alembic upgrade head` during deployment instead).
+- The retention variables control how long ingested logs, host metrics, and trace spans are kept; the scheduler purges expired rows automatically.
 
-Production auth note:
+## Usage
 
-- `ENVIRONMENT=production` refuses the default development `JWT_SECRET_KEY`.
-- Use a long random secret before deploying.
-- Keep `AUTO_CREATE_TABLES=false` in production. Run `python -m alembic upgrade head`
-  during deployment before starting or restarting the API.
-
-Development database note:
-
-- Local development should also use `python -m alembic upgrade head`.
-- `AUTO_CREATE_TABLES=true` is only a temporary local convenience for throwaway
-  databases; do not use it for production or shared environments.
-
-## Main User Flow
-
-1. Register a user.
-2. Enter the six-digit email verification code.
-3. Log in after verification.
-4. Create an organization.
-5. Create clients if you manage monitors per client.
-6. Create monitors (WEBSITE, API, SSL, DNS, TCP, HEARTBEAT) with environments and tags.
-7. Add alert channels for the organization.
-8. Create an API key for machine ingestion (logs, host metrics, traces).
-9. Schedule maintenance windows to pause checks deliberately.
-10. Create a status page and add monitor services.
-11. Use Reports to generate monthly reliability summaries.
-12. Track reliability with SLOs and error budgets; explore logs, traces, and hosts.
-
-## Planned Product Additions
-
-Implemented in the observability expansion (see `PROGRESS_CHECKLIST.md`):
-
-- SSL/DNS/TCP monitoring, maintenance windows, monitor tags and environments
-- Centralized log ingestion with redaction, search, and retention
-- Infrastructure agent with CPU/memory/disk/network metrics and thresholds
-- Distributed tracing (OTLP/JSON), service maps, SLOs, dashboards
-
-Next up (from `Newplan.md`):
-
-- Team management: organization invites, member roles (ADMIN/DEVELOPER/VIEWER/CLIENT),
-  permission enforcement, audit logs
-- Report features: scheduled monthly client report emails, persisted report
-  history, PDF export
-- SaaS monetization: subscription plans, usage limits, Paystack/Flutterwave and
-  Stripe
-- Remaining advanced checks: domain expiry, ICMP ping, multi-region checks
-- Architecture hardening: persist alert cooldowns/rule registry to the database,
-  SQL-side log bucketing, OTLP gRPC/protobuf support
-
-## Auth Flow
-
-Registration:
+### Authentication
 
 ```bash
+# Register (then verify the emailed six-digit code)
 curl -X POST http://127.0.0.1:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"full_name":"Test User","email":"test@example.com","password":"StrongPass123"}'
-```
 
-Verify email:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/auth/verify-email \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","code":"123456"}'
-```
-
-Login:
-
-```bash
+# Log in -> access_token + refresh_token
 curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"StrongPass123"}'
+
+# Refresh / logout / password reset
+POST /api/v1/auth/refresh     {"refresh_token": "..."}
+POST /api/v1/auth/logout      {"refresh_token": "..."}
+POST /api/v1/auth/forgot-password  {"email": "..."}
+POST /api/v1/auth/reset-password   {"email": "...", "code": "123456", "new_password": "..."}
 ```
 
-Refresh access token:
+All protected endpoints take `Authorization: Bearer YOUR_ACCESS_TOKEN`. Interactive docs for every endpoint are at `/docs`.
+
+### Monitors
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
-```
-
-Logout:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/auth/logout \
-  -H "Content-Type: application/json" \
-  -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
-```
-
-Password reset:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/auth/forgot-password \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com"}'
-
-curl -X POST http://127.0.0.1:8000/api/v1/auth/reset-password \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","code":"123456","new_password":"NewStrongPass123"}'
-```
-
-## Monitoring API Examples
-
-Create an organization:
-
-```bash
+# Organization
 curl -X POST http://127.0.0.1:8000/api/v1/organizations/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Demo Agency","slug":"demo-agency"}'
-```
 
-Create a website monitor:
-
-```bash
+# Website monitor with environment and tags
 curl -X POST http://127.0.0.1:8000/api/v1/monitors/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"organization_id":"ORG_PUBLIC_ID","name":"Website","url":"https://example.com","monitor_type":"WEBSITE","interval_seconds":60,"environment":"production","tags":["client-acme"]}'
-```
 
-Create a TCP port monitor:
-
-```bash
+# SSL certificate monitor - warns when expiry is within ssl_expiry_threshold_days
 curl -X POST http://127.0.0.1:8000/api/v1/monitors/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"organization_id":"ORG_PUBLIC_ID","name":"Client SSL","monitor_type":"SSL","url":"https://clientwebsite.com","interval_seconds":86400,"ssl_expiry_threshold_days":14}'
+
+# TCP port monitor
+curl -X POST http://127.0.0.1:8000/api/v1/monitors/ \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"organization_id":"ORG_PUBLIC_ID","name":"Postgres","monitor_type":"TCP","url":"tcp://db.example.com","port":5432,"interval_seconds":60}'
+
+# Heartbeat monitor - create response includes heartbeat_url to ping from your cron job
+curl -X POST http://127.0.0.1:8000/api/v1/monitors/ \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"organization_id":"ORG_PUBLIC_ID","name":"Nightly backup","monitor_type":"HEARTBEAT","interval_seconds":3600}'
+
+# Run a check now / list check history / per-monitor stats
+POST /api/v1/monitors/{id}/run-check
+GET  /api/v1/monitors/{id}/checks
+GET  /api/v1/monitors/{id}/stats
+
+# Filter the monitor list
+GET /api/v1/monitors/?organization_id=...&monitor_type=SSL&status=UP&environment=production&tag=critical
 ```
 
-Run a manual check:
+Heartbeat check-ins: `POST /api/v1/monitors/heartbeat/{heartbeat_key}`. Missed heartbeats are detected by the scheduler and open incidents like any other failure. The older `/api/v1/heartbeats` standalone API is deprecated and kept only for legacy clients.
+
+API monitors support `expected_status_code`, `expected_response_text` (keyword), `expected_json` (nested dot-paths like `data.status`), `expected_headers`, and `response_time_threshold_ms`.
+
+### Maintenance windows
+
+Windows suppress scheduled checks, incident creation, and missed-heartbeat detection for their monitors while active, and show up on public status pages:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/monitors/MONITOR_PUBLIC_ID/run-check \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl -X POST http://127.0.0.1:8000/api/v1/maintenance-windows/ \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"organization_id":"ORG_PUBLIC_ID","title":"DB upgrade","starts_at":"2026-05-22T01:00:00Z","ends_at":"2026-05-22T03:00:00Z","monitor_ids":["MONITOR_PUBLIC_ID"]}'
 ```
 
-Get check history:
+### Alerts
 
-```bash
-curl http://127.0.0.1:8000/api/v1/monitors/MONITOR_PUBLIC_ID/checks \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-## Alert Channels
-
-Create an email alert channel:
+When a failure opens an incident, active alert channels receive queued notification events; the notification worker delivers them and marks them `SENT` or `FAILED`.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/alert-channels/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"organization_id":1,"name":"Ops Email","channel_type":"EMAIL","config":{"email":"ops@example.com"}}'
 ```
 
-Create a Telegram alert channel:
+Supported channel types: `EMAIL`, `TELEGRAM`, `WEBHOOK`. Test a channel with `POST /api/v1/alert-channels/{id}/test`.
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/alert-channels/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{"organization_id":1,"name":"Ops Telegram","channel_type":"TELEGRAM","config":{"chat_id":"123456789"}}'
-```
+### Telegram bot
 
-When a monitor failure creates an incident, active alert channels for that organization receive queued notification events. The notification worker sends pending events and marks them `SENT` or `FAILED`.
-
-## Reports
-
-The Reports tab generates server-calculated monthly reliability reports. It includes:
-
-- Client or all-client scope
-- Reporting period
-- Monitors included
-- Uptime percentage
-- Total downtime
-- Incident count
-- Average response time
-- Per-monitor summaries
-- Incident list
-- Authenticated HTML report view
-
-Reports are generated on demand and are not persisted yet.
-
-Planned report additions:
-
-- Persist generated monthly reports
-- Email scheduled monthly client reports
-- Export monthly reports as PDF
-
-JSON report endpoint:
-
-```bash
-curl "http://127.0.0.1:8000/api/v1/reports/monthly?organization_id=ORG_PUBLIC_ID&year=2026&month=5" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-HTML report endpoint:
-
-```text
-GET /api/v1/reports/monthly/html?organization_id=ORG_PUBLIC_ID&year=2026&month=5
-```
-
-## Status Pages
-
-Public status pages are available without authentication:
-
-```bash
-curl http://127.0.0.1:8000/api/v1/public/status-pages/STATUS_PAGE_SLUG
-```
-
-Frontend public route:
-
-```text
-/status/:slug
-```
-
-## Heartbeats
-
-The primary WATCHDOG heartbeat product path is a heartbeat-type monitor:
-
-```json
-{
-  "organization_id": "ORG_PUBLIC_ID",
-  "name": "Nightly backup",
-  "monitor_type": "HEARTBEAT",
-  "interval_seconds": 3600
-}
-```
-
-The create response includes `heartbeat_url`, which should be called by the job
-or worker being monitored. Missed heartbeat detection, incidents, alerting, and
-status pages are all driven by these `Monitor` records.
-
-The older `/api/v1/heartbeats` standalone API is deprecated and retained only
-for legacy clients. Standalone heartbeat rows do not create incidents, send
-alerts, or appear on status pages.
-
-## Telegram Integration
-
-Telegram uses webhook mode.
-
-Configure:
-
-```env
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-TELEGRAM_WEBHOOK_SECRET=your-random-webhook-secret
-TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/integrations/telegram/webhook
-TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
-```
-
-Register the webhook:
+Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_URL`, and `TELEGRAM_ALLOWED_CHAT_IDS`, then register the webhook:
 
 ```powershell
 python scripts/register_telegram_webhook.py
 ```
 
-Webhook route:
+Bot commands: `/status`, `/monitors`, `/alerts`, `/ack <alert_id>`, `/resolve <alert_id>`, `/enable <monitor_id>`, `/disable <monitor_id>`.
 
-```text
-/api/v1/integrations/telegram/webhook
-```
-
-Supported bot commands:
-
-- `/status`
-- `/monitors`
-- `/alerts`
-- `/ack <alert_id>`
-- `/resolve <alert_id>`
-- `/enable <monitor_id>`
-- `/disable <monitor_id>`
-
-## Testing
-
-Run backend tests without the coverage gate while developing:
-
-```powershell
-python -m pytest --no-cov
-```
-
-Focused checks:
-
-```powershell
-python -m pytest tests\integration\test_api\test_auth_organizations_api.py --no-cov
-python -m pytest tests\integration\test_api\test_monitors_api.py --no-cov
-python -m pytest tests\integration\test_api\test_incidents_api.py --no-cov
-python -m pytest tests\integration\test_api\test_alert_channels_api.py --no-cov
-python -m pytest tests\integration\test_api\test_clients_status_pages_api.py --no-cov
-python -m pytest tests\integration\test_api\test_reports_api.py --no-cov
-python -m pytest tests\integration\test_api\test_observability_api.py --no-cov
-python -m pytest tests\unit\test_services\test_checker_types.py --no-cov
-python -m pytest tests\unit\test_services\test_observability_services.py --no-cov
-python -m pytest tests\unit\test_services\test_rule_engine_new_rules.py --no-cov
-python -m pytest tests\unit\test_schemas\test_monitor_new_types.py --no-cov
-python -m pytest tests\unit\test_utils\test_redaction_time_period.py --no-cov
-```
-
-End-to-end smoke test (boots against a live API on a disposable database —
-see the script header for setup):
-
-```powershell
-python scripts/e2e_smoke_test.py
-```
-
-Frontend build:
-
-```powershell
-cd frontend
-npm run build
-```
-
-Fresh PostgreSQL migration verification:
-
-```powershell
-$env:WATCHDOG_MIGRATION_TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/watchdog_migration_test"
-python scripts/verify_fresh_migrations.py
-```
-
-The script drops and recreates the `public` schema in the configured database,
-then runs `alembic upgrade head`. Use only a disposable database. The equivalent
-pytest test is skipped unless `WATCHDOG_MIGRATION_TEST_DATABASE_URL` is set.
-
-## Project Structure
-
-```text
-monitoring-platform/
-├── frontend/                # React + Vite dashboard
-├── src/monitoring/          # FastAPI application package
-│   ├── alerting/            # Email, Telegram, webhook, transactional email
-│   ├── api/v1/              # REST routes (monitors, incidents, logs, traces,
-│   │                        # infrastructure, slos, dashboards, analytics,
-│   │                        # maintenance-windows, api-keys, ...)
-│   ├── core/                # Password hashing and token helpers
-│   ├── models/              # SQLAlchemy models (incl. LogEntry, TraceSpan,
-│   │                        # HostMetric, HostThreshold, ApiKey, SLO,
-│   │                        # MaintenanceWindow, DashboardTemplate)
-│   ├── schemas/             # Pydantic schemas
-│   ├── services/            # Business logic (checker, rules, logs, traces,
-│   │                        # infrastructure, analytics, SLOs, ...)
-│   ├── utils/               # Logging, URL safety, redaction, period parsing
-│   └── workers/             # Scheduler (checks + housekeeping) and
-│                            # notification worker
-├── agent/                   # Lightweight Linux infrastructure agent
-├── alembic/                 # Database migrations
-├── tests/                   # Unit and integration tests
-├── scripts/                 # Utility scripts (incl. e2e_smoke_test.py)
-├── requirements.txt
-├── pyproject.toml
-└── README.md
-```
-
-## Monitoring Beyond HTTP
-
-Monitor types: `WEBSITE`, `API` (HTTP with status/keyword/JSON/header/response-time assertions), `HEARTBEAT` (push check-ins), `SSL` (certificate expiry with DEGRADED warnings before expiry), `DNS` (record resolution with expected values), `TCP` (port connectivity).
-
-Monitors can be organized with `environment` labels and `tags`, and filtered in the monitor list (`?monitor_type=&status=&environment=&tag=`).
-
-### SSL monitors
+### Status pages
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/monitors/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{"organization_id":"ORG_PUBLIC_ID","name":"Client SSL","monitor_type":"SSL","url":"https://clientwebsite.com","interval_seconds":86400,"ssl_expiry_threshold_days":14}'
+curl http://127.0.0.1:8000/api/v1/public/status-pages/STATUS_PAGE_SLUG
 ```
 
-SSL checks read the TLS certificate, store the expiry and issuer on the monitor, mark the monitor `DEGRADED` within the threshold, raise `SSL_EXPIRING` alerts, and fail once the certificate is expired.
+Public route in the dashboard: `/status/:slug`. Shows per-service status, uptime, active/recent incidents, and maintenance windows.
 
-### Maintenance windows
-
-Maintenance windows suppress scheduled checks, incident creation, and missed-heartbeat detection for their monitors while active; they are shown on public status pages (active + upcoming).
+### Reports
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/maintenance-windows/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -d '{"organization_id":"ORG_PUBLIC_ID","title":"DB upgrade","starts_at":"2026-05-22T01:00:00Z","ends_at":"2026-05-22T03:00:00Z","monitor_ids":["MONITOR_PUBLIC_ID"]}'
+curl "http://127.0.0.1:8000/api/v1/reports/monthly?organization_id=ORG_PUBLIC_ID&year=2026&month=5" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-## Centralized Logging
+HTML version at `GET /api/v1/reports/monthly/html`. Reports include per-monitor uptime, total downtime, incident counts, and average response time, scoped to a client or the whole organization. Generated on demand.
 
-Applications ship structured logs to WATCHDOG with an API key:
+## Sending Data to WATCHDOG
+
+All ingestion endpoints authenticate with an **API key** (`X-API-Key: wd_live_...`) created under **API Keys** in the dashboard. Keys are shown once, stored hashed, optionally scoped (`logs:write`, `metrics:write`, `traces:write`), and revocable.
+
+### Application logs
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/logs/ingest \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: wd_live_..." \
+  -H "Content-Type: application/json" -H "X-API-Key: wd_live_..." \
   -d '{"logs":[{"application":"checkout-api","level":"ERROR","message":"payment declined"}]}'
 ```
 
-- Batches up to 500 entries; levels normalized (`warn`→`WARNING`, `fatal`→`CRITICAL`).
-- Secret material (bearer/JWT tokens, `password:` values, card-like numbers, sensitive attribute keys) is redacted at ingestion time and never stored.
-- Query with JWT auth: `GET /api/v1/logs/?organization_id=&application=&level=&search=`; aggregates for charts: `GET /api/v1/logs/stats?organization_id=&period=24h`.
-- Retention: the scheduler purges logs older than `LOG_RETENTION_DAYS` (default 30); `DELETE /api/v1/logs/retention?organization_id=&retention_days=` purges on demand.
+Batches up to 500 entries; levels are normalized (`warn` → `WARNING`, `fatal` → `CRITICAL`). Secret material — bearer/JWT tokens, `password:` style values, card-like numbers, sensitive attribute keys — is redacted at ingestion time and never stored. Query with JWT auth via `GET /api/v1/logs/` (application, level, environment, free-text search, trace-id, time-range filters) and `GET /api/v1/logs/stats` for volume and error-frequency chart data.
 
-## Infrastructure Monitoring
+### Infrastructure agent
 
-Install the agent on any Linux host (see [agent/README.md](agent/README.md)):
+On any Linux host ([agent/README.md](agent/README.md)):
 
 ```bash
 pip install psutil
-python agent/watchdog_agent.py --api-url http://watchdog:8000/api/v1 \
-  --api-key wd_live_... --interval 60 --watch nginx,postgres
+python agent/watchdog_agent.py \
+  --api-url http://watchdog-host:8000/api/v1 \
+  --api-key wd_live_... \
+  --interval 60 \
+  --watch nginx,postgres
 ```
 
-The agent reports CPU, memory, disk, network utilization, top processes, and watched-service status. Configure per-host thresholds (CPU/memory/disk %, required services) under `/api/v1/infrastructure/thresholds`; the scheduler evaluates them every few minutes and raises deduplicated alerts through your alert channels.
+The agent reports CPU, memory, disk, network utilization, top processes, and whether watched services are running. Configure per-host thresholds (CPU/memory/disk %, required services) via `/api/v1/infrastructure/thresholds` or the Infrastructure page; the scheduler evaluates them periodically and raises deduplicated alerts through your channels. View hosts on the Infrastructure page or `GET /api/v1/infrastructure/hosts`.
 
-## Distributed Tracing (OpenTelemetry)
+### Traces (OpenTelemetry)
 
-WATCHDOG accepts OTLP/JSON trace exports. Point an OpenTelemetry SDK exporter at:
+Point an OpenTelemetry SDK's OTLP/JSON exporter at:
 
 ```text
-POST /api/v1/traces/ingest   (X-API-Key auth, traces:write scope)
+POST /api/v1/traces/ingest    (X-API-Key auth, traces:write scope)
 ```
 
-The endpoint accepts standard `resourceSpans` OTLP/JSON payloads (and a simple native `{"spans": [...]}` format). Query recent traces, one trace's span waterfall, and the derived service dependency map:
+The endpoint accepts standard `resourceSpans` OTLP/JSON payloads. Query traces, span waterfalls, and the dependency map:
 
 ```text
 GET /api/v1/traces/?organization_id=&period=24h
@@ -547,53 +280,86 @@ GET /api/v1/traces/{trace_id}?organization_id=
 GET /api/v1/traces/service-map?organization_id=&period=24h
 ```
 
-## SLOs and Error Budgets
-
-Define an SLO against any monitor (target % over a rolling window of days); WATCHDOG computes attainment from check results and the remaining error budget:
+## SLOs, Dashboards, and Analytics
 
 ```bash
+# Define an SLO: target % over a rolling window of days
 curl -X POST http://127.0.0.1:8000/api/v1/slos/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"organization_id":"ORG_PUBLIC_ID","monitor_id":"MONITOR_PUBLIC_ID","name":"API 99.9","target_percentage":99.9,"window_days":30}'
-curl http://127.0.0.1:8000/api/v1/slos/SLO_PUBLIC_ID/status -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Attainment and error budget
+GET /api/v1/slos/{slo_id}/status
 ```
 
-Anomaly detection runs automatically: response times more than 3σ above the recent baseline raise `ANOMALY` alerts alongside the threshold rules.
+Analytics endpoints power the dashboards:
 
-## Dashboards
+```text
+GET /api/v1/analytics/response-times?organization_id=&period=24h   # avg/p95 latency buckets
+GET /api/v1/analytics/uptime?organization_id=&period=7d            # uptime buckets
+GET /api/v1/analytics/service-health?organization_id=              # per-monitor overview
+GET /api/v1/analytics/incidents/{id}/timeline                      # correlated timeline
+```
 
-Reusable dashboard templates (`/api/v1/dashboards`) compose widgets — monitor status, uptime, response times, log volume, host health, incidents, service map, SLO status — into shareable layouts. Historical chart data comes from `/api/v1/analytics/response-times`, `/api/v1/analytics/uptime`, and `/api/v1/analytics/service-health`. Correlated incident timelines (updates + alerts + failed checks + related log errors) are available at `/api/v1/analytics/incidents/{id}/timeline`.
+Incident timelines merge updates, alerts, failed checks, and application log errors from the incident window into one chronological view. Dashboard templates (`/api/v1/dashboards`) compose widgets — monitor status, uptime, response times, log volume, host health, incidents, service map, SLO status — into reusable layouts.
+
+## Testing
+
+```powershell
+# Backend suite (coverage gate skipped for local runs)
+python -m pytest --no-cov
+
+# Frontend build
+cd frontend
+npm run build
+```
+
+Focused test files live under `tests/unit/` and `tests/integration/test_api/` — pick any with `python -m pytest tests/integration/test_api/test_observability_api.py --no-cov`.
+
+Verify migrations against a fresh database (uses a disposable database — do not point it at real data):
+
+```powershell
+$env:WATCHDOG_MIGRATION_TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/watchdog_migration_test"
+python scripts/verify_fresh_migrations.py
+```
+
+An end-to-end smoke script (`scripts/e2e_smoke_test.py`) exercises registration → organization → API key → ingestion → queries against a running server.
+
+## Project Structure
+
+```text
+├── frontend/                # React + Vite dashboard (pages in src/ui/App.tsx)
+├── src/monitoring/          # FastAPI application package
+│   ├── api/v1/              # REST routes: auth, organizations, clients, monitors,
+│   │                        # checks, alerts, alert-channels, incidents,
+│   │                        # status-pages, reports, maintenance-windows,
+│   │                        # api-keys, logs, infrastructure, traces, slos,
+│   │                        # dashboards, analytics, telegram integration
+│   ├── alerting/            # Email, Telegram, webhook senders
+│   ├── models/              # SQLAlchemy models
+│   ├── schemas/             # Pydantic request/response schemas
+│   ├── services/            # Business logic (checker, rule engine, incidents,
+│   │                        # logs, traces, infrastructure, analytics, SLOs)
+│   ├── core/                # Password hashing and token helpers
+│   ├── utils/               # Logging, URL safety (SSRF), redaction
+│   └── workers/             # Scheduler (checks + housekeeping), notification worker
+├── agent/                   # Standalone Linux infrastructure agent
+├── alembic/                 # Migrations
+├── tests/                   # Unit and integration tests (SQLite in-memory)
+├── scripts/                 # Utility and verification scripts
+└── requirements.txt
+```
 
 ## Troubleshooting
 
-### Frontend cannot connect to backend
+**Frontend cannot connect to the backend** — confirm both servers are running, `frontend/.env` has `VITE_API_BASE_URL=/api/v1`, `frontend/vite.config.ts` proxies `/api` to `http://127.0.0.1:8000`, and backend `CORS_ORIGINS` includes the frontend origin.
 
-Check:
+**Verification email not sent** — check `EMAIL_ENABLED=true`, `RESEND_API_KEY` is set, `FROM_EMAIL` is verified in Resend, and restart the backend after changing `.env`.
 
-- Backend is running at `http://127.0.0.1:8000`.
-- Frontend is running at `http://127.0.0.1:5173`.
-- `frontend/.env` has `VITE_API_BASE_URL=/api/v1`.
-- `frontend/vite.config.ts` proxies `/api` to `http://127.0.0.1:8000`.
-- Backend `CORS_ORIGINS` includes the frontend origin.
+**Monitor URL blocked as unsafe** — WATCHDOG rejects localhost, private/internal IPs (after DNS resolution), and cloud metadata endpoints to prevent SSRF. Use public, resolvable targets for website/API monitors.
 
-### Verification email is not sent
+**Missing database columns** — run `python -m alembic upgrade head`.
 
-Check:
+## License
 
-- `EMAIL_ENABLED=true`
-- `RESENT_API_KEY` or `RESEND_API_KEY` is set
-- `FROM_EMAIL` is verified in Resend
-- Restart the backend after changing `.env`
-
-### Monitor URL is blocked as unsafe
-
-WATCHDOG blocks unsafe monitor URLs and hostnames that do not resolve. Use public, resolvable URLs for website/API monitors.
-
-### Database columns are missing
-
-Apply migrations:
-
-```powershell
-python -m alembic upgrade head
-```
+[MIT](LICENSE)
