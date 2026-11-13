@@ -33,13 +33,13 @@ async def main() -> None:
         )
         assert r.status_code == 200, r.text
         token = r.json()["access_token"]
-        H = {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"Bearer {token}"}
 
         # 2. Org
         r = await c.post(
             f"{BASE}/organizations/",
             json={"name": "E2E Org", "slug": "e2e-org"},
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
         org_id = r.json()["public_id"]
@@ -48,11 +48,11 @@ async def main() -> None:
         r = await c.post(
             f"{BASE}/api-keys/",
             json={"organization_id": org_id, "name": "agent key"},
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
         key = r.json()["key"]
-        KH = {"X-API-Key": key}
+        key_headers = {"X-API-Key": key}
         print("api key created:", key[:12] + "...")
 
         # 4. Log ingestion (with secret material to verify redaction)
@@ -73,7 +73,7 @@ async def main() -> None:
                 },
             ],
         }
-        r = await c.post(f"{BASE}/logs/ingest", json=logs, headers=KH)
+        r = await c.post(f"{BASE}/logs/ingest", json=logs, headers=key_headers)
         assert r.status_code == 202, r.text
         print("log ingest:", r.json())
 
@@ -92,7 +92,7 @@ async def main() -> None:
                 },
             ],
         }
-        r = await c.post(f"{BASE}/infrastructure/ingest", json=metrics, headers=KH)
+        r = await c.post(f"{BASE}/infrastructure/ingest", json=metrics, headers=key_headers)
         assert r.status_code == 202, r.text
         print("metric ingest:", r.json())
 
@@ -139,14 +139,14 @@ async def main() -> None:
                 },
             ],
         }
-        r = await c.post(f"{BASE}/traces/ingest", json=otlp, headers=KH)
+        r = await c.post(f"{BASE}/traces/ingest", json=otlp, headers=key_headers)
         assert r.status_code == 202, r.text
         print("trace ingest:", r.json())
 
         # 7. Query everything back (JWT side)
         r = await c.get(
             f"{BASE}/logs/?organization_id={org_id}&level=ERROR",
-            headers=H,
+            headers=headers,
         )
         err_logs = r.json()
         assert err_logs["total"] == 1, err_logs
@@ -157,7 +157,7 @@ async def main() -> None:
 
         r = await c.get(
             f"{BASE}/logs/stats?organization_id={org_id}&period=24h",
-            headers=H,
+            headers=headers,
         )
         stats = r.json()
         print(
@@ -168,7 +168,7 @@ async def main() -> None:
 
         r = await c.get(
             f"{BASE}/infrastructure/hosts?organization_id={org_id}",
-            headers=H,
+            headers=headers,
         )
         hosts = r.json()
         print("hosts:", [(h["host"], h["health"]) for h in hosts["hosts"]])
@@ -181,11 +181,11 @@ async def main() -> None:
                 "cpu_percent": 80,
                 "process_names": ["nginx", "postgres"],
             },
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
 
-        r = await c.get(f"{BASE}/traces/?organization_id={org_id}", headers=H)
+        r = await c.get(f"{BASE}/traces/?organization_id={org_id}", headers=headers)
         traces = r.json()
         print(
             "traces:",
@@ -194,13 +194,13 @@ async def main() -> None:
 
         r = await c.get(
             f"{BASE}/traces/service-map?organization_id={org_id}&period=24h",
-            headers=H,
+            headers=headers,
         )
         print("service map:", r.json())
 
         r = await c.get(
             f"{BASE}/analytics/service-health?organization_id={org_id}",
-            headers=H,
+            headers=headers,
         )
         health = r.json()
         print("service-health counts:", health["counts"])
@@ -216,7 +216,7 @@ async def main() -> None:
                 "environment": "production",
                 "tags": ["payments", "critical"],
             },
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
         monitor = r.json()
@@ -231,11 +231,11 @@ async def main() -> None:
                 "target_percentage": 99.9,
                 "window_days": 30,
             },
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
         slo_id = r.json()["id"]
-        r = await c.get(f"{BASE}/slos/{slo_id}/status", headers=H)
+        r = await c.get(f"{BASE}/slos/{slo_id}/status", headers=headers)
         slo_status = r.json()
         print(
             "slo status:",
@@ -258,17 +258,17 @@ async def main() -> None:
                     {"type": "host_health", "title": "Hosts"},
                 ],
             },
-            headers=H,
+            headers=headers,
         )
         assert r.status_code == 201, r.text
         print("dashboard created:", r.json()["name"], "widgets:", len(r.json()["widgets"]))
 
         # 10. Monitor filters
-        r = await c.get(f"{BASE}/monitors/?organization_id={org_id}&tag=critical", headers=H)
+        r = await c.get(f"{BASE}/monitors/?organization_id={org_id}&tag=critical", headers=headers)
         print("tag filter total:", r.json()["total"])
         r = await c.get(
             f"{BASE}/monitors/?organization_id={org_id}&environment=production",
-            headers=H,
+            headers=headers,
         )
         print("environment filter total:", r.json()["total"])
 
