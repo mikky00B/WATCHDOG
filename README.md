@@ -2,6 +2,8 @@
 
 Uptime, log, and infrastructure monitoring for agencies and development teams.
 
+**Live instance:** [watchdog.clevermike.studio](https://watchdog.clevermike.studio/)
+
 WATCHDOG watches your websites, APIs, SSL certificates, DNS records, TCP ports, and cron jobs — opens incidents when things break, alerts you through email and Telegram, publishes public status pages, ingests application logs and host metrics, and tracks SLOs. Built with FastAPI, PostgreSQL, and React.
 
 **What it does**

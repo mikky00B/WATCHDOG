@@ -23,6 +23,7 @@ import {
   RadioTower,
   ScrollText,
   Server,
+  ShieldCheck,
   SquareChartGantt,
   Target,
   Trash2,
@@ -254,7 +255,12 @@ const lpFeatures = [
   {
     icon: MonitorCheck,
     title: "Uptime & API checks",
-    text: "HTTP checks against any URL with expected status codes, latency thresholds, and intervals that suit the job — from every 60 seconds upward.",
+    text: "HTTP checks with expected status codes, keyword and nested-JSON assertions, response headers, and per-monitor latency budgets.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "SSL, DNS & TCP monitoring",
+    text: "Certificate expiry warnings before they burn you, DNS record checks with expected values, and port connectivity probes.",
   },
   {
     icon: RadioTower,
@@ -264,30 +270,35 @@ const lpFeatures = [
   {
     icon: AlertTriangle,
     title: "Incidents with receipts",
-    text: "Every failure opens an incident with the reason, duration, and an acknowledge/resolve trail — so post-mortems write themselves.",
+    text: "Failures above threshold open incidents with the reason, duration, and an acknowledge/resolve trail — so post-mortems write themselves.",
   },
   {
-    icon: SquareChartGantt,
-    title: "Client-ready reporting",
-    text: "Monthly reliability summaries per client, plus public status pages your customers can check instead of calling you.",
+    icon: ScrollText,
+    title: "Centralized logs",
+    text: "Ship structured logs from any app; secrets are redacted on ingest, everything is searchable, and error-frequency charts come free.",
+  },
+  {
+    icon: Server,
+    title: "Infrastructure & traces",
+    text: "A lightweight agent reports CPU, memory, disk, and services with alert thresholds — plus OpenTelemetry traces, service maps, and SLOs.",
   },
 ];
 
 const lpSteps = [
   {
     num: "01",
-    title: "Add a monitor",
-    text: "Paste any URL, pick an interval, done. Heartbeat monitors for cron jobs get their own ping URL.",
+    title: "Point WATCHDOG at your stack",
+    text: "Websites, APIs, SSL certificates, DNS records, TCP ports, cron heartbeats — organized with environments and tags per client.",
   },
   {
     num: "02",
     title: "We keep watch",
-    text: "WATCHDOG checks every target on schedule, tracks latency, and opens incidents the moment a check fails.",
+    text: "Checks run on schedule with retries and rate limits. Incidents open automatically, your apps ship us logs, and hosts report metrics.",
   },
   {
     num: "03",
     title: "You hear it first",
-    text: "Alert channels over email and Telegram fan out the moment something breaks — with the reason attached.",
+    text: "Email and Telegram alerts fan out with the reason attached — plus SLO budgets, anomaly alerts, and client-ready status pages.",
   },
 ];
 
@@ -309,12 +320,12 @@ function LandingPage() {
         </nav>
         <section className="hero">
           <div className="hero-copy">
-            <span className="eyebrow">Uptime, API, and cron-job monitoring</span>
+            <span className="eyebrow">Monitoring &amp; observability for agencies</span>
             <h1>Know it&apos;s down before your clients do.</h1>
             <p>
-              WATCHDOG checks your websites, APIs, and scheduled jobs every minute and alerts
-              you the moment something breaks — built for agencies that run the internet for
-              other people.
+              WATCHDOG watches your websites, APIs, certificates, cron jobs, servers, and
+              application logs — and alerts you the moment anything breaks. Full-stack
+              observability, built for agencies that run the internet for other people.
             </p>
             <div className="hero-actions">
               <Link className="button primary lg" to="/register">
@@ -326,13 +337,13 @@ function LandingPage() {
             </div>
             <ul className="hero-points">
               <li>
-                <CheckCircle2 size={15} /> 60-second checks
+                <CheckCircle2 size={15} /> SSL, DNS &amp; TCP checks
               </li>
               <li>
-                <CheckCircle2 size={15} /> Email &amp; Telegram alerts
+                <CheckCircle2 size={15} /> Logs, metrics &amp; traces
               </li>
               <li>
-                <CheckCircle2 size={15} /> Client-ready status pages
+                <CheckCircle2 size={15} /> Status pages &amp; client reports
               </li>
             </ul>
           </div>
@@ -342,7 +353,7 @@ function LandingPage() {
                 <span className="dot red" />
                 <span className="dot amber" />
                 <span className="dot green" />
-                <span className="url-pill">app.watchdog.dev/overview</span>
+                <span className="url-pill">watchdog.clevermike.studio/app</span>
               </div>
               <img
                 src="/screenshots/dashboard-overview.png"
@@ -355,7 +366,7 @@ function LandingPage() {
 
       <section className="lp-features" id="features">
         <span className="eyebrow">Everything in one place</span>
-        <h2>Built for the way agencies run uptime</h2>
+        <h2>Built for the way agencies run the internet</h2>
         <div className="lp-grid">
           {lpFeatures.map((feature) => (
             <article className="lp-card" key={feature.title}>
@@ -393,7 +404,7 @@ function LandingPage() {
               <span className="dot red" />
               <span className="dot amber" />
               <span className="dot green" />
-              <span className="url-pill">app.watchdog.dev/monitors</span>
+              <span className="url-pill">watchdog.clevermike.studio/app/monitors</span>
             </div>
             <img
               src="/screenshots/dashboard-monitors.png"
@@ -436,6 +447,7 @@ function LandingPage() {
         <nav>
           <Link to="/login">Log in</Link>
           <Link to="/register">Create account</Link>
+          <a href="https://watchdog.clevermike.studio/">watchdog.clevermike.studio</a>
         </nav>
         <small>© {new Date().getFullYear()} WATCHDOG. All rights reserved.</small>
       </footer>
