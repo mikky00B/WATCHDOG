@@ -26,7 +26,7 @@ class AlertBase(BaseModel):
 class AlertCreate(AlertBase):
     """Schema for creating an alert."""
 
-    monitor_id: int
+    monitor_id: int | None = None
     triggered_at: datetime
 
 
@@ -44,7 +44,7 @@ class AlertResponse(AlertBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    monitor_id: int
+    monitor_id: int | None
     resolved: bool
     acknowledged: bool
     triggered_at: datetime

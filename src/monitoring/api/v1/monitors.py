@@ -16,20 +16,31 @@ from monitoring.schemas.monitor import (
 )
 from monitoring.services.monitor_service import MonitorService
 from monitoring.services.organization_service import OrganizationService
-from monitoring.utils.url_safety import UnsafeURLError, validate_url_scheme_and_host
+from monitoring.utils.url_safety import (
+    UnsafeURLError,
+    validate_host_target,
+    validate_url_scheme_and_host,
+)
 
 router = APIRouter()
 
+HTTP_MONITOR_TYPES = {"WEBSITE", "API", "SSL"}
 
-def _validate_monitor_url(url: str | None) -> None:
+
+def _validate_monitor_url(url: str | None, monitor_type: str | None = None) -> None:
     """Reject unsafe monitor URLs at create/update time instead of first check.
 
-    Static checks only (no DNS) — resolvability stays a check-time concern.
+    HTTP-style monitors must use http(s) URLs; DNS/TCP monitors accept any
+    host target. Static checks only (no DNS) — resolvability stays a
+    check-time concern.
     """
     if url is None:
         return
     try:
-        validate_url_scheme_and_host(str(url))
+        if monitor_type is not None and monitor_type.upper() not in HTTP_MONITOR_TYPES:
+            validate_host_target(str(url))
+        else:
+            validate_url_scheme_and_host(str(url))
     except UnsafeURLError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -84,7 +95,7 @@ async def create_monitor(
 ) -> MonitorResponse:
     """Create a new monitor."""
     service = MonitorService(db)
-    _validate_monitor_url(monitor_in.url)
+    _validate_monitor_url(monitor_in.url, monitor_in.monitor_type)
     if monitor_in.organization_id is not None:
         organization = await OrganizationService(db).get_organization(monitor_in.organization_id)
         if (
@@ -214,8 +225,12 @@ async def list_monitors(
     enabled_only: bool = False,
     organization_id: uuid.UUID | None = None,
     client_id: uuid.UUID | None = None,
+    monitor_type: str | None = None,
+    monitor_status: str | None = Query(default=None, alias="status"),
+    environment: str | None = None,
+    tag: str | None = None,
 ) -> MonitorList:
-    """List all monitors."""
+    """List all monitors with optional type, status, environment, and tag filters."""
     service = MonitorService(db)
     internal_organization_id = None
     if organization_id is not None:
@@ -250,6 +265,10 @@ async def list_monitors(
         enabled_only=enabled_only,
         organization_id=internal_organization_id,
         client_id=internal_client_id,
+        monitor_type=monitor_type,
+        status=monitor_status,
+        environment=environment,
+        tag=tag,
     )
     return MonitorList(
         monitors=[_monitor_response(m) for m in monitors],
@@ -266,8 +285,11 @@ async def update_monitor(
 ) -> MonitorResponse:
     """Update a monitor."""
     service = MonitorService(db)
-    _validate_monitor_url(monitor_in.url)
     existing = await service.get_monitor(monitor_id)
+    effective_type = monitor_in.monitor_type
+    if effective_type is None and existing is not None:
+        effective_type = existing.monitor_type
+    _validate_monitor_url(monitor_in.url, effective_type)
     if (
         existing is not None
         and existing.organization_id is not None

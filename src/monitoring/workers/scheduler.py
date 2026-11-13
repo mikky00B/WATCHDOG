@@ -7,18 +7,28 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from monitoring.config import get_settings
 from monitoring.database import AsyncSessionLocal
 from monitoring.models.check_result import CheckResult
 from monitoring.models.monitor import Monitor
 from monitoring.services.alert_service import AlertService
-from monitoring.services.checker_service import CheckerService
+from monitoring.services.checker_service import (
+    CheckerService,
+    apply_check_result_to_monitor,
+)
 from monitoring.services.incident_service import IncidentService
+from monitoring.services.infrastructure_service import InfrastructureService
+from monitoring.services.log_service import LogService
+from monitoring.services.maintenance_service import MaintenanceService
 from monitoring.services.rule_engine import (
     RuleEngine,
     create_default_rules,
 )
+from monitoring.services.trace_service import TraceService
 
 logger = structlog.get_logger(__name__)
+
+HOUSEKEEPING_INTERVAL_SECONDS = 300  # Every 5 minutes
 
 
 class MonitorScheduler:
@@ -33,6 +43,7 @@ class MonitorScheduler:
         self.rule_engine = rule_engine
         self.running = False
         self._registered_monitors: set[int] = set()  # Track which monitors have rules
+        self._last_housekeeping: datetime | None = None
 
     async def start(self) -> None:
         """Start the scheduler."""
@@ -45,10 +56,48 @@ class MonitorScheduler:
         while self.running:
             try:
                 await self._run_checks()
+                await self._run_housekeeping()
                 await asyncio.sleep(10)  # Check every 10 seconds for due monitors
             except Exception as exc:
                 logger.error("scheduler_error", error=str(exc), exc_info=True)
                 await asyncio.sleep(10)
+
+    async def _run_housekeeping(self) -> None:
+        """Periodic side tasks: infra thresholds, retention cleanup."""
+        now = datetime.now(UTC)
+        if (
+            self._last_housekeeping is not None
+            and (now - self._last_housekeeping).total_seconds()
+            < HOUSEKEEPING_INTERVAL_SECONDS
+        ):
+            return
+        self._last_housekeeping = now
+        try:
+            async with AsyncSessionLocal() as db:
+                alerts = await InfrastructureService(db).evaluate_thresholds()
+                if alerts:
+                    logger.info("infra_threshold_alerts_created", count=len(alerts))
+        except Exception as exc:
+            logger.error("infra_threshold_evaluation_error", error=str(exc), exc_info=True)
+
+        settings = get_settings()
+        try:
+            async with AsyncSessionLocal() as db:
+                await LogService(db).delete_older_than(settings.log_retention_days)
+        except Exception as exc:
+            logger.error("log_retention_error", error=str(exc), exc_info=True)
+        try:
+            async with AsyncSessionLocal() as db:
+                await TraceService(db).delete_older_than(settings.trace_retention_days)
+        except Exception as exc:
+            logger.error("trace_retention_error", error=str(exc), exc_info=True)
+        try:
+            async with AsyncSessionLocal() as db:
+                await InfrastructureService(db).delete_older_than(
+                    settings.host_metric_retention_days,
+                )
+        except Exception as exc:
+            logger.error("host_metric_retention_error", error=str(exc), exc_info=True)
 
     async def stop(self) -> None:
         """Stop the scheduler."""
@@ -84,11 +133,6 @@ class MonitorScheduler:
         # Create default rules for the monitor
         rules = create_default_rules()
 
-        # TODO: In the future, you can customize rules based on monitor properties
-        # For example:
-        # if hasattr(monitor, 'custom_thresholds'):
-        #     rules = self._create_custom_rules(monitor)
-
         self.rule_engine.register_rules(monitor.id, rules)
         self._registered_monitors.add(monitor.id)
 
@@ -110,6 +154,18 @@ class MonitorScheduler:
             for monitor in monitors:
                 self._register_monitor_rules(monitor)
 
+            # Monitors inside an active maintenance window are not checked and
+            # do not generate incidents; their status is annotated as MAINTENANCE.
+            suppressed_ids = await MaintenanceService(db).get_suppressed_monitor_ids()
+            in_maintenance = [m for m in monitors if m.id in suppressed_ids]
+            for monitor in in_maintenance:
+                if monitor.status != "MAINTENANCE":
+                    monitor.status = "MAINTENANCE"
+            if in_maintenance:
+                await db.commit()
+
+            monitors = [m for m in monitors if m.id not in suppressed_ids]
+
             await self._record_missed_heartbeats(monitors, db)
 
             # Check which monitors are due
@@ -120,6 +176,7 @@ class MonitorScheduler:
                     "running_checks",
                     total_monitors=len(monitors),
                     due_monitors=len(due_monitors),
+                    maintenance_suppressed=len(in_maintenance),
                 )
 
                 # Run checks concurrently
@@ -227,9 +284,10 @@ class MonitorScheduler:
                 url=monitor.url,
             )
 
-            # Perform the check
-            check_result = await self.checker_service.check_http_endpoint(monitor)
+            # Perform the check (type-aware: HTTP, SSL, DNS, TCP)
+            check_result = await self.checker_service.run_check(monitor)
             check_result.organization_id = monitor.organization_id
+            apply_check_result_to_monitor(monitor, check_result)
 
             # Save result
             db.add(check_result)
@@ -240,7 +298,10 @@ class MonitorScheduler:
                 seconds=monitor.interval_seconds,
             )
             if check_result.success:
-                monitor.status = "UP"
+                if (check_result.meta or {}).get("degraded"):
+                    monitor.status = "DEGRADED"
+                else:
+                    monitor.status = "UP"
                 monitor.consecutive_successes += 1
                 monitor.consecutive_failures = 0
                 await IncidentService(db).resolve_for_monitor(

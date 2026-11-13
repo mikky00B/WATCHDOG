@@ -1,0 +1,48 @@
+Phase 1 — Monitoring improvements
+Highest priority
+
+Improve the existing monitoring engine.
+1. Advanced HTTP/API assertions (keyword and JSON).
+2. SSL certificate expiry monitoring.
+3. DNS and TCP monitoring.
+4. Maintenance windows.
+5. Monitor tags, environments and grouping.
+   
+   Phase 2 — Centralized logging
+   Highest priority
+   
+   Turn WATCHDOG into an operational troubleshooting tool.
+6. Structured application logging.
+7. Authenticated log ingestion API.
+8. Organization/client/application log isolation.
+9. Log search and filtering.
+10. Log retention and sensitive-data redaction.
+11. Error frequency and log-volume charts.
+    
+    Phase 3 — Infrastructure monitoring
+    High priority
+    
+    Extend monitoring beyond websites and APIs.
+12. Lightweight Linux monitoring agent.
+13. CPU, RAM and disk metrics.
+14. Network utilization.
+15. Process and service monitoring.
+16. Infrastructure alert thresholds.
+    
+    Phase 4 — Observability dashboards
+    
+    Make operational data easier to understand.
+17. Custom dashboard templates.
+18. Historical performance charts.
+19. Application error dashboards.
+20. Service health overview.
+21. Correlated incident timelines.
+    
+    Phase 5 — Advanced capabilities
+    
+    Features that differentiate WATCHDOG.
+22. OpenTelemetry integration.
+23. Distributed tracing.
+24. Service dependency mapping.
+25. SLO and error-budget tracking.
+26. Automated anomaly detection.

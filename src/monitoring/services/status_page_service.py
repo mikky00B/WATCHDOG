@@ -17,6 +17,7 @@ from monitoring.schemas.status_page import (
     StatusPageServiceCreate,
     StatusPageUpdate,
 )
+from monitoring.services.maintenance_service import MaintenanceService
 
 
 class StatusPageService:
@@ -214,6 +215,9 @@ class StatusPageService:
 
         active_incidents = await self._incident_payloads(status_page.organization_id, active=True)
         recent_incidents = await self._incident_payloads(status_page.organization_id, active=False)
+        maintenance_windows = await MaintenanceService(self.db).public_maintenance_payload(
+            status_page.organization_id,
+        )
 
         return {
             "name": status_page.name,
@@ -224,7 +228,7 @@ class StatusPageService:
             "services": services,
             "active_incidents": active_incidents,
             "recent_incidents": recent_incidents,
-            "maintenance_windows": [],
+            "maintenance_windows": maintenance_windows,
         }
 
     async def _uptime_percentage(self, monitor_id: int) -> float:

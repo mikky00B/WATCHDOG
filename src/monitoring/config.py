@@ -84,6 +84,12 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO")
+    # Ingested application log retention (days)
+    log_retention_days: int = Field(default=30, ge=1, le=3650)
+    # Host metric retention (days)
+    host_metric_retention_days: int = Field(default=14, ge=1, le=365)
+    # Trace span retention (days)
+    trace_retention_days: int = Field(default=7, ge=1, le=365)
 
     @field_validator("telegram_allowed_chat_ids", mode="before")
     @classmethod

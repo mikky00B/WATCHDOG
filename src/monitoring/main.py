@@ -12,16 +12,24 @@ from sqlalchemy import func, select
 from monitoring.api.v1 import (
     alert_channels,
     alerts,
+    analytics,
     auth,
     checks,
     clients,
+    dashboards,
     heartbeats,
     incidents,
+    infrastructure,
+    logs,
+    maintenance,
     monitors,
     organizations,
     reports,
+    slos,
     status_pages,
+    traces,
 )
+from monitoring.api.v1 import api_keys as api_keys_router
 from monitoring.api.v1.integrations import telegram as telegram_integration
 from monitoring.config import get_settings
 from monitoring.database import close_db, init_db
@@ -175,6 +183,61 @@ app.include_router(
     telegram_integration.router,
     prefix="/api/v1/integrations/telegram",
     tags=["integrations"],
+)
+app.include_router(
+    maintenance.router,
+    prefix="/api/v1/maintenance-windows",
+    tags=["maintenance-windows"],
+)
+app.include_router(
+    api_keys_router.router,
+    prefix="/api/v1/api-keys",
+    tags=["api-keys"],
+)
+app.include_router(
+    logs.router,
+    prefix="/api/v1/logs",
+    tags=["logs"],
+)
+app.include_router(
+    logs.ingest_router,
+    prefix="/api/v1/logs",
+    tags=["log-ingestion"],
+)
+app.include_router(
+    infrastructure.router,
+    prefix="/api/v1/infrastructure",
+    tags=["infrastructure"],
+)
+app.include_router(
+    infrastructure.ingest_router,
+    prefix="/api/v1/infrastructure",
+    tags=["infrastructure-ingestion"],
+)
+app.include_router(
+    traces.router,
+    prefix="/api/v1/traces",
+    tags=["traces"],
+)
+app.include_router(
+    traces.ingest_router,
+    prefix="/api/v1/traces",
+    tags=["trace-ingestion"],
+)
+app.include_router(
+    slos.router,
+    prefix="/api/v1/slos",
+    tags=["slos"],
+)
+app.include_router(
+    dashboards.router,
+    prefix="/api/v1/dashboards",
+    tags=["dashboards"],
+)
+app.include_router(
+    analytics.router,
+    prefix="/api/v1/analytics",
+    tags=["analytics"],
 )
 
 

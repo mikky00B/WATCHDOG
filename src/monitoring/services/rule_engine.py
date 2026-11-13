@@ -26,6 +26,8 @@ class RuleType(str, Enum):
     HEARTBEAT_MISSED = "heartbeat_missed"
     UPTIME_PERCENTAGE = "uptime_percentage"  # New: Track uptime SLA
     STATUS_CODE_PATTERN = "status_code_pattern"  # New: Alert on specific status codes
+    SSL_EXPIRING = "ssl_expiring"  # New: SSL certificate expiry warnings
+    ANOMALY = "anomaly"  # New: statistical anomaly detection on response times
 
 
 @dataclass
@@ -374,6 +376,145 @@ class StatusCodePatternRule(Rule):
         return None
 
 
+class SSLExpiringRule(Rule):
+    """Triggers alerts when an SSL certificate is near or past expiry.
+
+    Self-guards on SSL monitors — other monitor types never trigger it.
+    """
+
+    async def evaluate(
+        self,
+        monitor: Monitor,
+        latest_result: CheckResult,
+        db: AsyncSession,
+    ) -> AlertCreate | None:
+        """Evaluate SSL certificate expiry against the configured threshold."""
+        if (monitor.monitor_type or "").upper() != "SSL":
+            return None
+
+        expires_at = monitor.ssl_expires_at
+        if expires_at is None:
+            return None
+
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+        threshold_days = float(self.config.threshold)
+
+        if expires_at <= now:
+            logger.warning(
+                "ssl_certificate_expired",
+                monitor_id=monitor.id,
+                monitor_name=monitor.name,
+            )
+            return AlertCreate(
+                monitor_id=monitor.id,
+                severity=AlertSeverity.CRITICAL,
+                title=f"SSL certificate for '{monitor.name}' has expired",
+                message=(
+                    f"The certificate expired on "
+                    f"{expires_at.strftime('%Y-%m-%d')}. Renew it immediately."
+                ),
+                triggered_at=datetime.now(UTC),
+            )
+
+        days_remaining = (expires_at - now).total_seconds() / 86400
+        if days_remaining <= threshold_days:
+            logger.warning(
+                "ssl_certificate_expiring_soon",
+                monitor_id=monitor.id,
+                monitor_name=monitor.name,
+                days_remaining=round(days_remaining, 1),
+            )
+            return AlertCreate(
+                monitor_id=monitor.id,
+                severity=self.config.severity,
+                title=f"SSL certificate for '{monitor.name}' expires soon",
+                message=(
+                    f"The certificate expires in {round(days_remaining)} days "
+                    f"({expires_at.strftime('%Y-%m-%d')}), threshold is "
+                    f"{round(threshold_days)} days."
+                ),
+                triggered_at=datetime.now(UTC),
+            )
+
+        return None
+
+
+class AnomalyRule(Rule):
+    """Detects statistical anomalies in response times (z-score based).
+
+    Compares the latest check latency against the recent baseline; triggers
+    when the latency deviates by more than the configured z-score and is at
+    least 1.5x the baseline mean (guards against trivial deviations).
+    """
+
+    async def evaluate(
+        self,
+        monitor: Monitor,
+        latest_result: CheckResult,
+        db: AsyncSession,
+    ) -> AlertCreate | None:
+        """Evaluate latency anomaly against recent history."""
+        if latest_result.latency_ms is None or not latest_result.success:
+            return None
+
+        min_samples = 10
+        if self.config.metadata:
+            min_samples = int(self.config.metadata.get("min_samples", min_samples))
+        min_z_score = float(self.config.threshold)
+
+        stmt = (
+            select(CheckResult)
+            .where(CheckResult.monitor_id == monitor.id)
+            .order_by(CheckResult.checked_at.desc())
+            .limit(min_samples + 1)
+        )
+        result = await db.execute(stmt)
+        recent_checks = list(result.scalars().all())
+
+        if len(recent_checks) < min_samples + 1:
+            return None
+
+        baseline = [
+            check.latency_ms
+            for check in recent_checks[1:]
+            if check.latency_ms is not None and check.success
+        ]
+        if len(baseline) < min_samples:
+            return None
+
+        mean = sum(baseline) / len(baseline)
+        variance = sum((value - mean) ** 2 for value in baseline) / len(baseline)
+        std_dev = variance**0.5
+        if std_dev == 0 or mean <= 0:
+            return None
+
+        z_score = (latest_result.latency_ms - mean) / std_dev
+        if z_score >= min_z_score and latest_result.latency_ms > mean * 1.5:
+            logger.warning(
+                "latency_anomaly_detected",
+                monitor_id=monitor.id,
+                monitor_name=monitor.name,
+                z_score=round(z_score, 2),
+                latency_ms=latest_result.latency_ms,
+                baseline_mean_ms=round(mean, 2),
+            )
+            return AlertCreate(
+                monitor_id=monitor.id,
+                severity=self.config.severity,
+                title=f"Response time anomaly detected on '{monitor.name}'",
+                message=(
+                    f"Current latency {latest_result.latency_ms:.0f}ms is "
+                    f"{z_score:.1f}σ above the recent mean of {mean:.0f}ms."
+                ),
+                triggered_at=datetime.now(UTC),
+            )
+
+        return None
+
+
 class RuleEngine:
     """Evaluates monitoring rules and triggers alerts with deduplication."""
 
@@ -551,6 +692,21 @@ def create_default_rules() -> list[Rule]:
                 threshold=95,  # 95% uptime
                 window_minutes=60,
                 severity=AlertSeverity.WARNING,
+            )
+        ),
+        SSLExpiringRule(
+            RuleConfig(
+                rule_type=RuleType.SSL_EXPIRING,
+                threshold=14,  # days before expiry
+                severity=AlertSeverity.WARNING,
+            )
+        ),
+        AnomalyRule(
+            RuleConfig(
+                rule_type=RuleType.ANOMALY,
+                threshold=3.0,  # z-score
+                severity=AlertSeverity.WARNING,
+                metadata={"min_samples": 10},
             )
         ),
     ]

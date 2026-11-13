@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -12,16 +12,23 @@ import {
   ExternalLink,
   Gauge,
   Home,
+  KeyRound,
+  LayoutDashboard,
   LogOut,
   Menu,
   MonitorCheck,
+  Network,
   Pencil,
   Plus,
   RadioTower,
+  ScrollText,
+  Server,
   SquareChartGantt,
+  Target,
   Trash2,
   UserCircle,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -29,14 +36,22 @@ import { LogoMark } from "./LogoMark";
 import {
   alertChannelService,
   alertService,
+  analyticsService,
+  apiKeyService,
   authService,
   clientService,
   dashboardService,
+  dashboardTemplateService,
   incidentService,
+  infrastructureService,
+  logService,
+  maintenanceWindowService,
   monitorService,
   organizationService,
   reportService,
+  sloService,
   statusPageService,
+  traceService,
 } from "../services";
 import {
   apiUrl,
@@ -48,8 +63,15 @@ import {
   setToken,
 } from "../lib/api";
 import type {
+  ApiKey,
+  ApiKeyCreated,
+  ApiKeyScope,
   AuthResponse,
   Client,
+  DashboardTemplate,
+  DnsRecordType,
+  LogEntry,
+  MaintenanceWindow,
   Monitor,
   MonitorStatus,
   MonitorType,
@@ -57,7 +79,11 @@ import type {
   NotificationChannel,
   Organization,
   RegisterResponse,
+  SLO,
+  ServiceMapEdge,
   StatusPage,
+  Threshold,
+  TraceSpan,
 } from "../types";
 
 type AuthMutationResponse = AuthResponse | RegisterResponse;
@@ -671,10 +697,18 @@ function Shell() {
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
+    { to: "/app/health", label: "Service Health", icon: Activity },
     { to: "/app/alerts", label: "Alerts", icon: Bell },
     { to: "/app/incidents", label: "Incidents", icon: AlertTriangle },
     { to: "/app/clients", label: "Clients", icon: Users },
+    { to: "/app/maintenance", label: "Maintenance", icon: Wrench },
+    { to: "/app/logs", label: "Logs", icon: ScrollText },
+    { to: "/app/infrastructure", label: "Infrastructure", icon: Server },
+    { to: "/app/traces", label: "Traces", icon: Network },
+    { to: "/app/slos", label: "SLOs", icon: Target },
+    { to: "/app/dashboards", label: "Dashboards", icon: LayoutDashboard },
     { to: "/app/alert-channels", label: "Alert Channels", icon: Bell },
+    { to: "/app/api-keys", label: "API Keys", icon: KeyRound },
     { to: "/app/status-pages", label: "Status Pages", icon: RadioTower },
     { to: "/app/reports", label: "Reports", icon: SquareChartGantt },
   ];
@@ -812,6 +846,14 @@ function Shell() {
               <Route path="/incidents" element={<IncidentList organization={selected} />} />
               <Route path="/incidents/:incidentId" element={<IncidentDetail />} />
               <Route path="/clients" element={<Clients organization={selected} />} />
+              <Route path="/maintenance" element={<MaintenancePage organization={selected} />} />
+              <Route path="/logs" element={<LogsPage organization={selected} />} />
+              <Route path="/infrastructure" element={<InfrastructurePage organization={selected} />} />
+              <Route path="/traces" element={<TracesPage organization={selected} />} />
+              <Route path="/slos" element={<SlosPage organization={selected} />} />
+              <Route path="/dashboards" element={<DashboardsPage organization={selected} />} />
+              <Route path="/health" element={<HealthPage organization={selected} />} />
+              <Route path="/api-keys" element={<ApiKeysPage organization={selected} />} />
               <Route path="/alert-channels" element={<AlertChannels organization={selected} />} />
               <Route path="/status-pages" element={<StatusPages organization={selected} />} />
               <Route path="/reports" element={<Reports organization={selected} />} />
@@ -978,13 +1020,23 @@ function MonitorList({ organization }: { organization?: Organization }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
   const confirmAction = useConfirm();
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [environmentFilter, setEnvironmentFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   if (!organization) {
     return <EmptyOrganizations />;
   }
 
   const query = useQuery({
-    queryKey: ["monitors", organization?.public_id],
-    queryFn: () => monitorService.list(organization.public_id),
+    queryKey: ["monitors", organization?.public_id, typeFilter, statusFilter, environmentFilter, tagFilter],
+    queryFn: () =>
+      monitorService.list(organization.public_id, {
+        monitor_type: typeFilter || undefined,
+        status: statusFilter || undefined,
+        environment: environmentFilter || undefined,
+        tag: tagFilter || undefined,
+      }),
   });
   const remove = useMutation({
     mutationFn: (id: string) => monitorService.remove(id),
@@ -998,12 +1050,41 @@ function MonitorList({ organization }: { organization?: Organization }) {
 
   return (
     <section>
-      <PageHeader title="Monitors" description="Websites, APIs, and heartbeat jobs in this workspace.">
+      <PageHeader title="Monitors" description="Websites, APIs, SSL certificates, DNS records, TCP ports, and heartbeat jobs in this workspace.">
         <Link className="button primary" to="/app/monitors/new">
           <Plus size={16} />
           New monitor
         </Link>
       </PageHeader>
+      <form
+        className="filter-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          query.refetch();
+        }}
+      >
+        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <option value="">All types</option>
+          {["WEBSITE", "API", "HEARTBEAT", "SSL", "DNS", "TCP"].map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="">All statuses</option>
+          {["UP", "DOWN", "DEGRADED", "PAUSED", "MAINTENANCE", "UNKNOWN"].map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
+        <input
+          placeholder="Environment"
+          value={environmentFilter}
+          onChange={(event) => setEnvironmentFilter(event.target.value)}
+        />
+        <input placeholder="Tag" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)} />
+        <button className="button secondary compact" type="submit">
+          Filter
+        </button>
+      </form>
       {query.isLoading ? <TableSkeleton /> : null}
       {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
       {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
@@ -1060,6 +1141,12 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
   const [expectedText, setExpectedText] = useState("");
   const [requestBody, setRequestBody] = useState("");
   const [clientId, setClientId] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [tags, setTags] = useState("");
+  const [sslThresholdDays, setSslThresholdDays] = useState(14);
+  const [port, setPort] = useState("");
+  const [recordType, setRecordType] = useState<DnsRecordType>("A");
+  const [expectedValues, setExpectedValues] = useState("");
   const clients = useQuery({
     queryKey: ["clients", organization?.public_id],
     queryFn: () => clientService.list(organization!.public_id),
@@ -1085,6 +1172,16 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
         interval_seconds: interval,
         timeout_seconds: 5,
         enabled: true,
+        environment: environment || null,
+        tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        ...(type === "SSL" ? { ssl_expiry_threshold_days: sslThresholdDays } : {}),
+        ...(type === "TCP" ? { port: port ? Number(port) : null } : {}),
+        ...(type === "DNS"
+          ? { record_type: recordType, expected_values: expectedValues.split("\n").map((line) => line.trim()).filter(Boolean) }
+          : {}),
       })
       );
     },
@@ -1108,7 +1205,7 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
     <section>
       <PageHeader
         title="New monitor"
-        description={`Create a website, API, or heartbeat monitor in ${organization.name}.`}
+        description={`Create a website, API, SSL, DNS, TCP, or heartbeat monitor in ${organization.name}.`}
       />
       <form
         className="form-panel wide"
@@ -1118,7 +1215,7 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
         }}
       >
         <div className="segmented">
-          {(["WEBSITE", "API", "HEARTBEAT"] as MonitorType[]).map((option) => (
+          {(["WEBSITE", "API", "HEARTBEAT", "SSL", "DNS", "TCP"] as MonitorType[]).map((option) => (
             <button
               type="button"
               key={option}
@@ -1146,24 +1243,31 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
         </label>
         {type !== "HEARTBEAT" ? (
           <label>
-            Target URL
-            <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required />
+            {type === "TCP" ? "Target host (e.g. tcp://db.example.com)" : type === "DNS" ? "Domain (e.g. example.com)" : "Target URL"}
+            <input
+              type={type === "WEBSITE" || type === "API" ? "url" : "text"}
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              required
+            />
           </label>
         ) : null}
         {type !== "HEARTBEAT" ? (
           <p className="field-hint">
-            Public URLs only — localhost and private network addresses are blocked.
+            Public targets only — localhost and private network addresses are blocked.
           </p>
         ) : null}
         <div className="form-grid">
-          <label>
-            Method
-            <select value={method} onChange={(event) => setMethod(event.target.value)}>
-              {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </label>
+          {type === "WEBSITE" || type === "API" ? (
+            <label>
+              Method
+              <select value={method} onChange={(event) => setMethod(event.target.value)}>
+                {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label>
             Interval seconds
             <input
@@ -1174,7 +1278,7 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
               onChange={(event) => setIntervalValue(Number(event.target.value))}
             />
           </label>
-          {type !== "HEARTBEAT" ? (
+          {type === "WEBSITE" || type === "API" ? (
             <label>
               Expected status
               <input
@@ -1184,6 +1288,41 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
                 value={expectedStatus}
                 onChange={(event) => setExpectedStatus(Number(event.target.value))}
               />
+            </label>
+          ) : null}
+          {type === "SSL" ? (
+            <label>
+              Warn when expiring within (days)
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={sslThresholdDays}
+                onChange={(event) => setSslThresholdDays(Number(event.target.value))}
+              />
+            </label>
+          ) : null}
+          {type === "TCP" ? (
+            <label>
+              Port
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={port}
+                onChange={(event) => setPort(event.target.value)}
+                required
+              />
+            </label>
+          ) : null}
+          {type === "DNS" ? (
+            <label>
+              Record type
+              <select value={recordType} onChange={(event) => setRecordType(event.target.value as DnsRecordType)}>
+                {DNS_RECORD_TYPES.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
             </label>
           ) : null}
         </div>
@@ -1199,6 +1338,30 @@ function CreateMonitor({ organization }: { organization?: Organization }) {
             </label>
           </>
         ) : null}
+        {type === "DNS" ? (
+          <label>
+            Expected values (one per line, optional)
+            <textarea
+              value={expectedValues}
+              onChange={(event) => setExpectedValues(event.target.value)}
+              placeholder={"93.184.216.34"}
+            />
+          </label>
+        ) : null}
+        <div className="form-grid">
+          <label>
+            Environment (optional)
+            <input
+              value={environment}
+              onChange={(event) => setEnvironment(event.target.value)}
+              placeholder="production"
+            />
+          </label>
+          <label>
+            Tags (comma-separated, optional)
+            <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="critical, payments" />
+          </label>
+        </div>
         {mutation.isError ? <p className="error-text">{unwrapError(mutation.error)}</p> : null}
         <button className="button primary">Create monitor</button>
       </form>
@@ -1377,6 +1540,18 @@ function MonitorDetail() {
                 <dd>{formatDate(monitor.last_checked_at)}</dd>
                 <dt>Next check</dt>
                 <dd>{formatDate(monitor.next_check_at)}</dd>
+                {monitor.environment ? (
+                  <>
+                    <dt>Environment</dt>
+                    <dd>{monitor.environment}</dd>
+                  </>
+                ) : null}
+                {monitor.tags?.length ? (
+                  <>
+                    <dt>Tags</dt>
+                    <dd>{monitor.tags.join(", ")}</dd>
+                  </>
+                ) : null}
               </dl>
             </section>
             <form
@@ -1435,6 +1610,25 @@ function MonitorDetail() {
                 {update.isPending ? "Saving..." : "Save changes"}
               </button>
             </form>
+            {monitor.ssl_expires_at ? (
+              <section className="panel">
+                <h2>SSL certificate</h2>
+                <div className="metric-grid">
+                  <Metric
+                    label="Expires"
+                    value={formatDate(monitor.ssl_expires_at)}
+                    icon={Clock}
+                    tone={new Date(monitor.ssl_expires_at).getTime() < Date.now() ? "bad" : "ok"}
+                  />
+                  <Metric
+                    label="Days remaining"
+                    value={Math.round((new Date(monitor.ssl_expires_at).getTime() - Date.now()) / 86400000)}
+                    icon={Gauge}
+                  />
+                  <Metric label="Issuer" value={monitor.ssl_issuer ?? "—"} icon={CheckCircle2} />
+                </div>
+              </section>
+            ) : null}
             <section className="panel">
               <h2>Recent checks</h2>
               {checks.isLoading ? <div className="skeleton table-skeleton" /> : null}
@@ -1591,6 +1785,10 @@ function IncidentDetail() {
     },
   });
   const incident = query.data;
+  const timeline = useQuery({
+    queryKey: ["incident-timeline", incidentId],
+    queryFn: () => analyticsService.incidentTimeline(incidentId),
+  });
 
   return (
     <section>
@@ -1614,6 +1812,30 @@ function IncidentDetail() {
             <Metric label="Started" value={formatDate(incident.started_at)} icon={Clock} />
             <Metric label="Resolved" value={formatDate(incident.resolved_at)} icon={CheckCircle2} tone="ok" />
           </div>
+          <section className="panel">
+            <h2>Correlated timeline</h2>
+            <p className="field-hint">
+              Updates, alerts, failed checks, and related application log errors in one chronological view.
+            </p>
+            {timeline.isLoading ? <TableSkeleton /> : null}
+            {timeline.isError ? <ErrorBox message={unwrapError(timeline.error)} /> : null}
+            {timeline.data?.events.length ? (
+              <div className="list-stack">
+                {timeline.data.events.map((event, index) => (
+                  <div key={index} className="list-row">
+                    <strong>{formatDate(event.timestamp)}</strong>
+                    <span className={event.kind === "alert" ? "status warn" : event.kind === "check" ? "status bad" : "status"}>
+                      {event.kind.toUpperCase()}
+                    </span>
+                    <span>{event.message}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {!timeline.isLoading && !(timeline.data?.events.length ?? 0) ? (
+              <EmptyInline text="No timeline events yet." />
+            ) : null}
+          </section>
         </>
       ) : null}
     </section>
@@ -2413,6 +2635,1204 @@ function ChannelActions({ channel, onEdit }: { channel: NotificationChannel; onE
         <Trash2 size={16} />
       </button>
     </div>
+  );
+}
+
+const DNS_RECORD_TYPES: DnsRecordType[] = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "PTR"];
+
+function levelClass(level: string) {
+  const normalized = level.toUpperCase();
+  if (normalized === "ERROR" || normalized === "CRITICAL") return "status bad";
+  if (normalized === "WARNING") return "status warn";
+  if (normalized === "INFO") return "status ok";
+  return "status";
+}
+
+function healthClass(health: string) {
+  if (health === "OK") return "status ok";
+  if (health === "WARNING") return "status warn";
+  if (health === "CRITICAL") return "status bad";
+  return "status";
+}
+
+function toIso(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
+function MaintenancePage({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const confirmAction = useConfirm();
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [monitorIds, setMonitorIds] = useState<string[]>([]);
+  const monitors = useQuery({
+    queryKey: ["monitors", organization?.public_id],
+    queryFn: () => monitorService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const query = useQuery({
+    queryKey: ["maintenance-windows", organization?.public_id],
+    queryFn: () => maintenanceWindowService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      maintenanceWindowService.create({
+        organization_id: organization!.public_id,
+        title,
+        description: description || null,
+        starts_at: toIso(startsAt),
+        ends_at: toIso(endsAt),
+        notify_subscribers: false,
+        monitor_ids: monitorIds,
+      }),
+    onSuccess: (window) => {
+      queryClient.invalidateQueries({ queryKey: ["maintenance-windows"] });
+      notify(`Maintenance window "${window.title}" created.`);
+      setShowForm(false);
+      setTitle("");
+      setDescription("");
+      setStartsAt("");
+      setEndsAt("");
+      setMonitorIds([]);
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => maintenanceWindowService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["maintenance-windows"] });
+      notify("Maintenance window deleted.");
+    },
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const windows = query.data?.windows ?? [];
+  const now = Date.now();
+  const windowState = (window: MaintenanceWindow) =>
+    new Date(window.ends_at).getTime() <= now
+      ? "COMPLETED"
+      : new Date(window.starts_at).getTime() <= now
+        ? "IN_PROGRESS"
+        : "SCHEDULED";
+
+  return (
+    <section>
+      <PageHeader
+        title="Maintenance windows"
+        description="Scheduled windows pause checks, incidents, and missed-heartbeat alerts for covered monitors."
+      >
+        <button className="button primary" onClick={() => setShowForm((open) => !open)}>
+          <Plus size={16} />
+          New window
+        </button>
+      </PageHeader>
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {create.isError ? <ErrorBox message={unwrapError(create.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
+      {showForm ? (
+        <form
+          className="form-panel wide"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create.mutate();
+          }}
+        >
+          <label>
+            Title
+            <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+          </label>
+          <label>
+            Description
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <div className="form-grid">
+            <label>
+              Starts at
+              <input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(event) => setStartsAt(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Ends at
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+                required
+              />
+            </label>
+          </div>
+          <fieldset className="field-group">
+            <legend>Covered monitors (none selected = whole workspace)</legend>
+            <div className="checkbox-grid">
+              {(monitors.data?.monitors ?? []).map((monitor) => (
+                <label key={monitor.public_id} className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={monitorIds.includes(monitor.public_id)}
+                    onChange={(event) => {
+                      setMonitorIds((current) =>
+                        event.target.checked
+                          ? [...current, monitor.public_id]
+                          : current.filter((id) => id !== monitor.public_id),
+                      );
+                    }}
+                  />
+                  {monitor.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {create.isPending ? <p className="field-hint">Creating…</p> : null}
+          <button className="button primary" disabled={create.isPending}>
+            Create window
+          </button>
+        </form>
+      ) : null}
+      {!query.isLoading && !windows.length ? (
+        <EmptyInline text="No maintenance windows scheduled." />
+      ) : null}
+      {windows.length ? (
+        <DataTable
+          headers={["Title", "State", "Starts", "Ends", "Monitors", ""]}
+          rows={windows.map((window) => [
+            window.title,
+            <span className={windowState(window) === "IN_PROGRESS" ? "status warn" : "status"}>
+              {windowState(window)}
+            </span>,
+            formatDate(window.starts_at),
+            formatDate(window.ends_at),
+            window.monitor_ids.length ? `${window.monitor_ids.length} monitor(s)` : "Whole workspace",
+            <div className="row-actions">
+              <button
+                className="icon-button"
+                title="Delete window"
+                aria-label={`Delete maintenance window ${window.title}`}
+                disabled={remove.isPending}
+                onClick={() => {
+                  confirmAction({
+                    title: `Delete maintenance window "${window.title}"?`,
+                    message: "Covered monitors will resume normal checking.",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      remove.mutate(window.id);
+                    }
+                  });
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>,
+          ])}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function LogsPage({ organization }: { organization?: Organization }) {
+  const [application, setApplication] = useState("");
+  const [level, setLevel] = useState("");
+  const [search, setSearch] = useState("");
+  const stats = useQuery({
+    queryKey: ["log-stats", organization?.public_id],
+    queryFn: () => logService.stats(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const query = useQuery({
+    queryKey: ["logs", organization?.public_id, application, level, search],
+    queryFn: () =>
+      logService.list({
+        organizationId: organization!.public_id,
+        application: application || undefined,
+        level: level || undefined,
+        search: search || undefined,
+        limit: 200,
+      }),
+    enabled: Boolean(organization),
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const logs = query.data?.logs ?? [];
+  const statsData = stats.data;
+  const maxVolume = Math.max(1, ...(statsData?.volume ?? []).map((point) => point.total));
+  const totalLogs = statsData?.total ?? 0;
+
+  return (
+    <section>
+      <PageHeader
+        title="Logs"
+        description="Application logs ingested through the log API — searchable, filtered, and redacted."
+      />
+      {stats.isLoading ? <SkeletonGrid /> : null}
+      {stats.isError ? <ErrorBox message={unwrapError(stats.error)} /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {statsData ? (
+        <div className="metric-grid">
+          <Metric label="Log lines (24h)" value={statsData.total} icon={ScrollText} />
+          <Metric label="Errors" value={statsData.error_count} icon={AlertTriangle} tone={statsData.error_count ? "bad" : "ok"} />
+          <Metric label="Applications" value={Object.keys(statsData.errors_by_application).length || "—"} icon={Server} />
+          <Metric label="Debug/Info" value={(statsData.by_level.INFO ?? 0) + (statsData.by_level.DEBUG ?? 0)} icon={CheckCircle2} tone="ok" />
+        </div>
+      ) : null}
+      {statsData && statsData.volume.length ? (
+        <div className="panel">
+          <h3>Volume (24h, buckets of time)</h3>
+          <div className="volume-chart" role="img" aria-label="Log volume over time">
+            {statsData.volume.map((point) => (
+              <div
+                key={point.bucket}
+                className="volume-col"
+                title={`${point.total} lines, ${point.error} errors`}
+              >
+                <div className="volume-err" style={{ height: `${(point.error / maxVolume) * 100}%` }} />
+                <div className="volume-total" style={{ height: `${(point.total / maxVolume) * 100}%` }} />
+              </div>
+            ))}
+          </div>
+          <p className="field-hint">Red segments are errors; grey segments are total volume.</p>
+        </div>
+      ) : null}
+      <form
+        className="filter-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          query.refetch();
+        }}
+      >
+        <input
+          placeholder="Application"
+          value={application}
+          onChange={(event) => setApplication(event.target.value)}
+        />
+        <select value={level} onChange={(event) => setLevel(event.target.value)}>
+          <option value="">All levels</option>
+          {["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
+        <input
+          placeholder="Search messages…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <button className="button secondary compact" type="submit">
+          Apply
+        </button>
+      </form>
+      {totalLogs > 0 && !logs.length ? <EmptyInline text="No logs match these filters." /> : null}
+      {!query.isLoading && !totalLogs ? <EmptyInline text="No logs ingested yet — point your apps at /api/v1/logs/ingest with an API key." /> : null}
+      {logs.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Level</th>
+                <th>Application</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((entry: LogEntry) => (
+                <tr key={entry.id}>
+                  <td>{formatDate(entry.timestamp)}</td>
+                  <td>
+                    <span className={levelClass(entry.level)}>{entry.level}</span>
+                  </td>
+                  <td>
+                    {entry.application}
+                    {entry.environment ? <span className="field-hint"> · {entry.environment}</span> : null}
+                  </td>
+                  <td>
+                    <span className="cell-value">{entry.message}</span>
+                    {entry.attributes && Object.keys(entry.attributes).length ? (
+                      <details>
+                        <summary>attributes</summary>
+                        <pre className="log-attributes">{JSON.stringify(entry.attributes, null, 2)}</pre>
+                      </details>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ApiKeysPage({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const confirmAction = useConfirm();
+  const [name, setName] = useState("");
+  const [scopes, setScopes] = useState<string[]>([]);
+  const [createdKey, setCreatedKey] = useState<ApiKeyCreated | null>(null);
+  const query = useQuery({
+    queryKey: ["api-keys", organization?.public_id],
+    queryFn: () => apiKeyService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      apiKeyService.create({
+        organization_id: organization!.public_id,
+        name,
+        scopes: scopes as ApiKeyScope[],
+      }),
+    onSuccess: (key) => {
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      setCreatedKey(key);
+      setName("");
+      setScopes([]);
+      notify("API key created — copy it now, it is shown only once.");
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (id: string) => apiKeyService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      notify("API key revoked.");
+    },
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const keys = query.data?.api_keys ?? [];
+  const scopeOptions: Array<{ value: NonNullable<ApiKey["scopes"]>[number]; label: string }> = [
+    { value: "logs:write", label: "Log ingestion" },
+    { value: "metrics:write", label: "Host metrics" },
+    { value: "traces:write", label: "Trace ingestion" },
+  ];
+
+  return (
+    <section>
+      <PageHeader
+        title="API keys"
+        description="Machine credentials for log, metric, and trace ingestion. Keys are hashed — the raw value is shown once."
+      />
+      <form
+        className="form-panel wide"
+        onSubmit={(event) => {
+          event.preventDefault();
+          create.mutate();
+        }}
+      >
+        <div className="form-grid">
+          <label>
+            Key name
+            <input value={name} onChange={(event) => setName(event.target.value)} required placeholder="e.g. checkout-api agent" />
+          </label>
+        </div>
+        <fieldset className="field-group">
+          <legend>Scopes (none selected = full ingestion access)</legend>
+          <div className="checkbox-grid">
+            {scopeOptions.map((option) => (
+              <label key={option.value} className="checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(option.value)}
+                  onChange={(event) => {
+                    setScopes((current) =>
+                      event.target.checked
+                        ? [...current, option.value]
+                        : current.filter((scope) => scope !== option.value),
+                    );
+                  }}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {create.isError ? <p className="error-text">{unwrapError(create.error)}</p> : null}
+        <button className="button primary" disabled={create.isPending}>
+          Create API key
+        </button>
+      </form>
+      {createdKey ? (
+        <section className="panel success-panel">
+          <h2>Copy your API key now</h2>
+          <p className="field-hint">
+            This is the only time the full key is shown. Only the prefix <code>{createdKey.key_prefix}</code> is stored.
+          </p>
+          <code className="raw-key">{createdKey.key}</code>
+          <button
+            className="button secondary"
+            onClick={() => {
+              navigator.clipboard.writeText(createdKey.key);
+              notify("API key copied to clipboard.");
+            }}
+          >
+            <Copy size={16} />
+            Copy key
+          </button>
+        </section>
+      ) : null}
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {revoke.isError ? <ErrorBox message={unwrapError(revoke.error)} /> : null}
+      {!query.isLoading && !keys.length ? <EmptyInline text="No API keys yet." /> : null}
+      {keys.length ? (
+        <DataTable
+          headers={["Name", "Key", "Scopes", "Last used", "Status", ""]}
+          rows={keys.map((key) => [
+            key.name,
+            <code>{key.key_prefix}…</code>,
+            key.scopes?.length ? key.scopes.join(", ") : "all",
+            formatDate(key.expires_at ?? null),
+            <span className={key.expires_at && new Date(key.expires_at) < new Date() ? "status bad" : "status ok"}>
+              {key.expires_at && new Date(key.expires_at) < new Date() ? "EXPIRED" : "ACTIVE"}
+            </span>,
+            <div className="row-actions">
+              <button
+                className="button compact danger"
+                disabled={revoke.isPending}
+                onClick={() => {
+                  confirmAction({
+                    title: `Revoke API key "${key.name}"?`,
+                    message: "Clients using this key will immediately fail authentication.",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      revoke.mutate(key.id);
+                    }
+                  });
+                }}
+              >
+                Revoke
+              </button>
+            </div>,
+          ])}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function InfrastructurePage({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const [thresholdHost, setThresholdHost] = useState<string | null>(null);
+  const [cpu, setCpu] = useState("");
+  const [memory, setMemory] = useState("");
+  const [disk, setDisk] = useState("");
+  const [processes, setProcesses] = useState("");
+  const query = useQuery({
+    queryKey: ["infra-hosts", organization?.public_id],
+    queryFn: () => infrastructureService.hosts(organization!.public_id, 6),
+    enabled: Boolean(organization),
+    refetchInterval: 30000,
+  });
+  const saveThreshold = useMutation({
+    mutationFn: (host: string) =>
+      infrastructureService.createThreshold({
+        organization_id: organization!.public_id,
+        host,
+        cpu_percent: cpu ? Number(cpu) : null,
+        memory_percent: memory ? Number(memory) : null,
+        disk_percent: disk ? Number(disk) : null,
+        process_names: processes
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean),
+      }),
+    onSuccess: (threshold) => {
+      queryClient.invalidateQueries({ queryKey: ["infra-hosts"] });
+      notify(`Thresholds saved for ${threshold.host}.`);
+      setThresholdHost(null);
+    },
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const hosts = query.data?.hosts ?? [];
+  const usage = (value: number | null | undefined) => (value == null ? "—" : `${Math.round(value)}%`);
+  const barTone = (value: number | null, limit: number) => {
+    if (value == null) return "";
+    if (value > limit) return "bad";
+    if (value >= limit * 0.9) return "warn";
+    return "ok";
+  };
+
+  return (
+    <section>
+      <PageHeader
+        title="Infrastructure"
+        description="Hosts reporting through the WATCHDOG agent. Run agent/watchdog_agent.py on any Linux host."
+      />
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {saveThreshold.isError ? <ErrorBox message={unwrapError(saveThreshold.error)} /> : null}
+      {!query.isLoading && !hosts.length ? (
+        <EmptyInline text="No hosts reporting yet — install the agent and give it an API key." />
+      ) : null}
+      {hosts.map((host) => {
+        const latest = host.latest;
+        const cpuLimit = host.threshold?.cpu_percent ?? 90;
+        const memLimit = host.threshold?.memory_percent ?? 90;
+        const diskLimit = host.threshold?.disk_percent ?? 90;
+        return (
+          <div className="panel host-panel" key={host.host}>
+            <div className="host-head">
+              <h3>
+                <Server size={18} /> {host.host}
+                {host.environment ? <span className="field-hint"> · {host.environment}</span> : null}
+              </h3>
+              <span className={healthClass(host.health)}>{host.health}</span>
+            </div>
+            {latest ? (
+              <>
+                <div className="usage-row">
+                  <span>CPU {usage(latest.cpu_percent)} / {cpuLimit}%</span>
+                  <div className="usage-bar">
+                    <div className={`usage-fill ${barTone(latest.cpu_percent, cpuLimit)}`} style={{ width: `${latest.cpu_percent ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className="usage-row">
+                  <span>Memory {usage(latest.memory_percent)} / {memLimit}%</span>
+                  <div className="usage-bar">
+                    <div className={`usage-fill ${barTone(latest.memory_percent, memLimit)}`} style={{ width: `${latest.memory_percent ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className="usage-row">
+                  <span>Disk {usage(latest.disk_percent)} / {diskLimit}%</span>
+                  <div className="usage-bar">
+                    <div className={`usage-fill ${barTone(latest.disk_percent, diskLimit)}`} style={{ width: `${latest.disk_percent ?? 0}%` }} />
+                  </div>
+                </div>
+                <p className="field-hint">
+                  Net in {latest.net_in_kb_per_s ?? 0} KB/s · out {latest.net_out_kb_per_s ?? 0} KB/s ·{" "}
+                  {latest.disk_used_gb != null ? `${latest.disk_used_gb} GB used · ` : ""}
+                  sampled {formatDate(latest.measured_at)}
+                </p>
+                {latest.service_checks && typeof latest.service_checks === "object" ? (
+                  <p className="field-hint">
+                    Services:{" "}
+                    {Object.entries(latest.service_checks as Record<string, boolean>)
+                      .map(([name, running]) => `${name}${running ? " ✓" : " ✗"}`)
+                      .join(" · ") || "none watched"}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <EmptyInline text="No samples in the last 6 hours." />
+            )}
+            <div className="row-actions">
+              <button
+                className="button compact secondary"
+                onClick={() => {
+                  setThresholdHost(thresholdHost === host.host ? null : host.host);
+                  setCpu(host.threshold?.cpu_percent != null ? String(host.threshold.cpu_percent) : "");
+                  setMemory(host.threshold?.memory_percent != null ? String(host.threshold.memory_percent) : "");
+                  setDisk(host.threshold?.disk_percent != null ? String(host.threshold.disk_percent) : "");
+                  setProcesses((host.threshold?.process_names ?? []).join(", "));
+                }}
+              >
+                <Pencil size={14} />
+                {host.threshold ? "Edit thresholds" : "Set thresholds"}
+              </button>
+            </div>
+            {thresholdHost === host.host ? (
+              <form
+                className="form-panel"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveThreshold.mutate(host.host);
+                }}
+              >
+                <div className="form-grid">
+                  <label>
+                    CPU %
+                    <input type="number" min={1} max={100} value={cpu} onChange={(event) => setCpu(event.target.value)} />
+                  </label>
+                  <label>
+                    Memory %
+                    <input type="number" min={1} max={100} value={memory} onChange={(event) => setMemory(event.target.value)} />
+                  </label>
+                  <label>
+                    Disk %
+                    <input type="number" min={1} max={100} value={disk} onChange={(event) => setDisk(event.target.value)} />
+                  </label>
+                </div>
+                <label>
+                  Required services (comma-separated)
+                  <input value={processes} onChange={(event) => setProcesses(event.target.value)} placeholder="nginx, postgres" />
+                </label>
+                <button className="button primary compact" disabled={saveThreshold.isPending}>
+                  Save thresholds
+                </button>
+              </form>
+            ) : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function TracesPage({ organization }: { organization?: Organization }) {
+  const [openTrace, setOpenTrace] = useState<string | null>(null);
+  const [serviceFilter, setServiceFilter] = useState("");
+  const traces = useQuery({
+    queryKey: ["traces", organization?.public_id, serviceFilter],
+    queryFn: () =>
+      traceService.list({
+        organizationId: organization!.public_id,
+        service: serviceFilter || undefined,
+        limit: 50,
+      }),
+    enabled: Boolean(organization),
+  });
+  const serviceMap = useQuery({
+    queryKey: ["service-map", organization?.public_id],
+    queryFn: () => traceService.serviceMap(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const detail = useQuery({
+    queryKey: ["trace", openTrace, organization?.public_id],
+    queryFn: () => traceService.get(openTrace!, organization!.public_id),
+    enabled: Boolean(organization) && Boolean(openTrace),
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const traceList = traces.data?.traces ?? [];
+  const edges = serviceMap.data?.edges ?? [];
+  const spans = detail.data?.spans ?? [];
+  const spanDepth = (span: TraceSpan, all: TraceSpan[]) => {
+    let depth = 0;
+    let current = span;
+    while (current.parent_span_id && depth < 12) {
+      const parent = all.find((candidate) => candidate.span_id === current.parent_span_id);
+      if (!parent) break;
+      current = parent;
+      depth += 1;
+    }
+    return depth;
+  };
+  const maxSpanMs = Math.max(1, ...spans.map((span) => span.duration_ms ?? 0));
+
+  return (
+    <section>
+      <PageHeader
+        title="Traces"
+        description="Distributed traces ingested in OTLP/JSON format, with a derived service dependency map."
+      />
+      <form
+        className="filter-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          traces.refetch();
+        }}
+      >
+        <input
+          placeholder="Filter by service…"
+          value={serviceFilter}
+          onChange={(event) => setServiceFilter(event.target.value)}
+        />
+        <button className="button secondary compact" type="submit">
+          Apply
+        </button>
+      </form>
+      {traces.isLoading ? <TableSkeleton /> : null}
+      {traces.isError ? <ErrorBox message={unwrapError(traces.error)} /> : null}
+      {detail.isError ? <ErrorBox message={unwrapError(detail.error)} /> : null}
+      {!traces.isLoading && !traceList.length ? (
+        <EmptyInline text="No traces yet — point an OpenTelemetry OTLP/JSON exporter at /api/v1/traces/ingest with an API key." />
+      ) : null}
+      {traceList.length ? (
+        <DataTable
+          headers={["Trace", "Root operation", "Spans", "Services", "Errors", "Duration", "Started", ""]}
+          rows={traceList.map((trace) => [
+            <code>{trace.trace_id.slice(0, 12)}…</code>,
+            `${trace.root_service ?? "?"} · ${trace.root_operation ?? "?"}`,
+            trace.span_count,
+            trace.service_count,
+            trace.error_count ? (
+              <span className="status bad">{trace.error_count}</span>
+            ) : (
+              <span className="status ok">0</span>
+            ),
+            trace.duration_ms != null ? `${Math.round(trace.duration_ms)} ms` : "—",
+            formatDate(trace.started_at),
+            <div className="row-actions">
+              <button
+                className="button compact secondary"
+                onClick={() => setOpenTrace(openTrace === trace.trace_id ? null : trace.trace_id)}
+              >
+                {openTrace === trace.trace_id ? "Hide waterfall" : "Waterfall"}
+              </button>
+            </div>,
+          ])}
+        />
+      ) : null}
+      {openTrace && spans.length ? (
+        <div className="panel">
+          <h3>Waterfall — {openTrace.slice(0, 12)}…</h3>
+          <div className="waterfall">
+            {spans.map((span: TraceSpan) => (
+              <div className="waterfall-row" key={span.span_id} style={{ paddingLeft: spanDepth(span, spans) * 18 }}>
+                <span className="waterfall-label">
+                  {span.service} · {span.operation}
+                </span>
+                <div className="waterfall-track">
+                  <div
+                    className={`waterfall-bar ${span.status === "ERROR" ? "bad" : "ok"}`}
+                    style={{ width: `${Math.max(4, ((span.duration_ms ?? 0) / maxSpanMs) * 100)}%` }}
+                    title={`${Math.round(span.duration_ms ?? 0)} ms`}
+                  />
+                </div>
+                <span className="waterfall-ms">{span.duration_ms != null ? `${Math.round(span.duration_ms)} ms` : "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {serviceMap.isError ? <ErrorBox message={unwrapError(serviceMap.error)} /> : null}
+      {edges.length ? (
+        <div className="panel">
+          <h3>Service dependency map</h3>
+          <DataTable
+            headers={["From", "To", "Calls", "Avg duration", "Errors"]}
+            rows={edges.map((edge: ServiceMapEdge) => [
+              edge.source,
+              edge.target,
+              edge.call_count,
+              edge.avg_duration_ms != null ? `${Math.round(edge.avg_duration_ms)} ms` : "—",
+              edge.error_count || "0",
+            ])}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SlosPage({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const confirmAction = useConfirm();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [monitorId, setMonitorId] = useState("");
+  const [target, setTarget] = useState(99.9);
+  const [windowDays, setWindowDays] = useState(30);
+  const monitors = useQuery({
+    queryKey: ["monitors", organization?.public_id],
+    queryFn: () => monitorService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const query = useQuery({
+    queryKey: ["slos", organization?.public_id],
+    queryFn: () => sloService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const statuses = useQueries({
+    queries: (query.data?.slos ?? []).map((slo) => ({
+      queryKey: ["slo-status", slo.id],
+      queryFn: () => sloService.status(slo.id),
+      enabled: Boolean(organization),
+    })),
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      sloService.create({
+        organization_id: organization!.public_id,
+        monitor_id: monitorId,
+        name,
+        target_percentage: target,
+        window_days: windowDays,
+      }),
+    onSuccess: (slo) => {
+      queryClient.invalidateQueries({ queryKey: ["slos"] });
+      notify(`SLO "${slo.name}" created.`);
+      setShowForm(false);
+      setName("");
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => sloService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["slos"] });
+      notify("SLO deleted.");
+    },
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const slos = query.data?.slos ?? [];
+
+  return (
+    <section>
+      <PageHeader
+        title="SLOs"
+        description="Service level objectives with error-budget tracking, computed from check results."
+      >
+        <button className="button primary" onClick={() => setShowForm((open) => !open)}>
+          <Plus size={16} />
+          New SLO
+        </button>
+      </PageHeader>
+      {showForm ? (
+        <form
+          className="form-panel wide"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create.mutate();
+          }}
+        >
+          <div className="form-grid">
+            <label>
+              Name
+              <input value={name} onChange={(event) => setName(event.target.value)} required />
+            </label>
+            <label>
+              Monitor
+              <select value={monitorId} onChange={(event) => setMonitorId(event.target.value)} required>
+                <option value="">Select a monitor…</option>
+                {(monitors.data?.monitors ?? []).map((monitor) => (
+                  <option key={monitor.public_id} value={monitor.public_id}>
+                    {monitor.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Target %
+              <input
+                type="number"
+                min={50}
+                max={100}
+                step={0.01}
+                value={target}
+                onChange={(event) => setTarget(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Window (days)
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={windowDays}
+                onChange={(event) => setWindowDays(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          {create.isError ? <p className="error-text">{unwrapError(create.error)}</p> : null}
+          <button className="button primary" disabled={create.isPending}>
+            Create SLO
+          </button>
+        </form>
+      ) : null}
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
+      {!query.isLoading && !slos.length ? <EmptyInline text="No SLOs defined yet." /> : null}
+      {slos.map((slo: SLO, index: number) => {
+        const status = statuses[index]?.data;
+        const attained = status?.attained_percentage ?? null;
+        const remaining = status?.error_budget_remaining_percentage ?? null;
+        return (
+          <div className="panel host-panel" key={slo.id}>
+            <div className="host-head">
+              <h3>
+                <Target size={18} /> {slo.name}
+                {status ? <span className="field-hint"> · {status.monitor_name}</span> : null}
+              </h3>
+              {status ? (
+                <span className={status.target_met ? "status ok" : "status bad"}>
+                  {status.target_met ? "MET" : "MISSED"}
+                </span>
+              ) : null}
+            </div>
+            <p className="field-hint">
+              Target {slo.target_percentage}% over {slo.window_days} days
+              {attained != null ? ` · attained ${attained}%` : ""}
+              {status ? ` · ${status.total_checks} checks` : ""}
+            </p>
+            {remaining != null ? (
+              <div className="usage-row">
+                <span>Error budget remaining {remaining}%</span>
+                <div className="usage-bar">
+                  <div className={`usage-fill ${remaining > 25 ? "ok" : remaining > 0 ? "warn" : "bad"}`} style={{ width: `${remaining}%` }} />
+                </div>
+              </div>
+            ) : null}
+            <div className="row-actions">
+              <button
+                className="button compact danger"
+                disabled={remove.isPending}
+                onClick={() => {
+                  confirmAction({
+                    title: `Delete SLO "${slo.name}"?`,
+                    message: "This only removes the objective — monitors and checks are unaffected.",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      remove.mutate(slo.id);
+                    }
+                  });
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+const WIDGET_TYPES = [
+  "monitor_status",
+  "uptime",
+  "response_times",
+  "log_volume",
+  "host_health",
+  "incidents",
+  "service_map",
+  "slo_status",
+] as const;
+
+function DashboardsPage({ organization }: { organization?: Organization }) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
+  const confirmAction = useConfirm();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [widgets, setWidgets] = useState<Array<{ type: (typeof WIDGET_TYPES)[number]; title: string }>>([
+    { type: "monitor_status", title: "Services" },
+  ]);
+  const query = useQuery({
+    queryKey: ["dashboards", organization?.public_id],
+    queryFn: () => dashboardTemplateService.list(organization!.public_id),
+    enabled: Boolean(organization),
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      dashboardTemplateService.create({
+        organization_id: organization!.public_id,
+        name,
+        description: description || null,
+        is_default: false,
+        widgets: widgets.map((widget) => ({ ...widget, config: {} })),
+      }),
+    onSuccess: (dashboard) => {
+      queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+      notify(`Dashboard "${dashboard.name}" created.`);
+      setShowForm(false);
+      setName("");
+      setDescription("");
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => dashboardTemplateService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+      notify("Dashboard deleted.");
+    },
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const dashboards = query.data?.dashboards ?? [];
+
+  return (
+    <section>
+      <PageHeader
+        title="Dashboards"
+        description="Reusable dashboard layouts composed of widgets — build once per client or team."
+      >
+        <button className="button primary" onClick={() => setShowForm((open) => !open)}>
+          <Plus size={16} />
+          New dashboard
+        </button>
+      </PageHeader>
+      {showForm ? (
+        <form
+          className="form-panel wide"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create.mutate();
+          }}
+        >
+          <div className="form-grid">
+            <label>
+              Name
+              <input value={name} onChange={(event) => setName(event.target.value)} required />
+            </label>
+            <label>
+              Description
+              <input value={description} onChange={(event) => setDescription(event.target.value)} />
+            </label>
+          </div>
+          <fieldset className="field-group">
+            <legend>Widgets</legend>
+            {widgets.map((widget, index) => (
+              <div className="widget-row" key={index}>
+                <select
+                  value={widget.type}
+                  onChange={(event) => {
+                    setWidgets((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, type: event.target.value as (typeof WIDGET_TYPES)[number] } : item,
+                      ),
+                    );
+                  }}
+                >
+                  {WIDGET_TYPES.map((option) => (
+                    <option key={option} value={option}>
+                      {option.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={widget.title}
+                  placeholder="Widget title"
+                  onChange={(event) => {
+                    setWidgets((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, title: event.target.value } : item,
+                      ),
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Remove widget"
+                  onClick={() => setWidgets((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="button compact secondary"
+              onClick={() => setWidgets((current) => [...current, { type: "uptime", title: "Uptime" }])}
+            >
+              <Plus size={14} />
+              Add widget
+            </button>
+          </fieldset>
+          {create.isError ? <p className="error-text">{unwrapError(create.error)}</p> : null}
+          <button className="button primary" disabled={create.isPending}>
+            Create dashboard
+          </button>
+        </form>
+      ) : null}
+      {query.isLoading ? <TableSkeleton /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {remove.isError ? <ErrorBox message={unwrapError(remove.error)} /> : null}
+      {!query.isLoading && !dashboards.length ? <EmptyInline text="No dashboards yet." /> : null}
+      {dashboards.length ? (
+        <DataTable
+          headers={["Name", "Description", "Widgets", "Default", "Created", ""]}
+          rows={dashboards.map((dashboard: DashboardTemplate) => [
+            dashboard.name,
+            dashboard.description ?? "—",
+            (dashboard.widgets ?? []).map((widget) => widget.type.replaceAll("_", " ")).join(", ") || "—",
+            dashboard.is_default ? <span className="status ok">DEFAULT</span> : "—",
+            formatDate(dashboard.created_at),
+            <div className="row-actions">
+              <button
+                className="icon-button"
+                title="Delete dashboard"
+                aria-label={`Delete dashboard ${dashboard.name}`}
+                disabled={remove.isPending}
+                onClick={() => {
+                  confirmAction({
+                    title: `Delete dashboard "${dashboard.name}"?`,
+                    message: "The template layout will be removed.",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      remove.mutate(dashboard.id);
+                    }
+                  });
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>,
+          ])}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function HealthPage({ organization }: { organization?: Organization }) {
+  const query = useQuery({
+    queryKey: ["service-health", organization?.public_id],
+    queryFn: () => analyticsService.serviceHealth(organization!.public_id),
+    enabled: Boolean(organization),
+    refetchInterval: 30000,
+  });
+  if (!organization) {
+    return <EmptyOrganizations />;
+  }
+  const health = query.data;
+  const services = health?.services ?? [];
+  const counts = health?.counts;
+
+  return (
+    <section>
+      <PageHeader
+        title="Service health"
+        description="One view across every monitor: status, 24h uptime and latency, maintenance state, and SSL headroom."
+      />
+      {query.isLoading ? <SkeletonGrid /> : null}
+      {query.isError ? <ErrorBox message={unwrapError(query.error)} /> : null}
+      {counts ? (
+        <div className="metric-grid">
+          <Metric label="Up" value={counts.UP} icon={CheckCircle2} tone="ok" />
+          <Metric label="Down" value={counts.DOWN} icon={AlertTriangle} tone={counts.DOWN ? "bad" : "ok"} />
+          <Metric label="Degraded" value={counts.DEGRADED} icon={Gauge} tone={counts.DEGRADED ? "warn" : "ok"} />
+          <Metric label="In maintenance" value={counts.MAINTENANCE} icon={Wrench} />
+        </div>
+      ) : null}
+      {!query.isLoading && !services.length ? <EmptyInline text="No monitors yet." /> : null}
+      {services.length ? (
+        <DataTable
+          headers={["Service", "Type", "Status", "Uptime 24h", "Latency 24h", "Client", "Environment", "Tags", "SSL", "Last checked"]}
+          rows={services.map((service) => [
+            <Link to={`/app/monitors/${service.public_id}`}>{service.name}</Link>,
+            service.monitor_type,
+            <span className={service.in_maintenance ? "status" : statusClass(service.status)}>
+              {service.in_maintenance ? "MAINTENANCE" : service.status}
+            </span>,
+            service.uptime_24h != null ? `${service.uptime_24h}%` : "—",
+            service.avg_latency_24h != null ? `${Math.round(service.avg_latency_24h)} ms` : "—",
+            service.client_name ?? "—",
+            service.environment ?? "—",
+            service.tags?.length ? service.tags.join(", ") : "—",
+            service.ssl_days_remaining != null
+              ? service.ssl_days_remaining <= 0
+                ? <span className="status bad">EXPIRED</span>
+                : service.ssl_days_remaining < 14
+                  ? <span className="status warn">{Math.round(service.ssl_days_remaining)}d</span>
+                  : `${Math.round(service.ssl_days_remaining)}d`
+              : "—",
+            formatDate(service.last_checked_at),
+          ])}
+        />
+      ) : null}
+    </section>
   );
 }
 

@@ -46,7 +46,7 @@ class Monitor(Base):
         String(50),
         nullable=False,
         default="http",
-    )  # 'http', 'heartbeat', 'dependency'
+    )  # 'http', 'heartbeat', 'dependency' (legacy) / WEBSITE, API, HEARTBEAT, SSL, DNS, TCP
     heartbeat_key: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
@@ -54,17 +54,32 @@ class Monitor(Base):
         index=True,
     )
 
+    # Grouping and classification
+    environment: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
     # Check configuration
     http_method: Mapped[str] = mapped_column(String(20), default="GET", nullable=False)
     expected_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expected_response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     expected_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    expected_headers: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
     request_headers: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
     request_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     timeout_seconds: Mapped[float] = mapped_column(Float, default=5.0)
     response_time_threshold_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # TCP / DNS check configuration
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    record_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    expected_values: Mapped[list[object] | None] = mapped_column(JSON, nullable=True)
+
+    # SSL certificate tracking (populated by SSL monitor checks)
+    ssl_expiry_threshold_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ssl_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ssl_issuer: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Tracking
     status: Mapped[str] = mapped_column(String(50), default="UNKNOWN", nullable=False)

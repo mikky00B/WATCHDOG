@@ -53,6 +53,7 @@ ignore = ["E501"]
 "__init__.py" = ["F401"]  # Unused imports in __init__ files
 "alembic/*" = ["E402"]    # env.py configures sys.path before imports
 "scripts/*" = ["E402", "T201"]  # CLI utilities: sys.path setup and print output
+"agent/*" = ["E402", "T201"]   # Standalone agent CLI
 
 [tool.ruff.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends"]  # Depends() in defaults is idiomatic FastAPI

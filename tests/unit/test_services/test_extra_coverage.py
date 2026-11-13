@@ -170,7 +170,7 @@ async def test_rule_engine_additional_rule_types(test_db: AsyncSession, sample_m
         create_default_rules,
     )
 
-    assert len(create_default_rules()) == 4
+    assert len(create_default_rules()) == 6
     with pytest.raises(ValueError):
         RuleConfig(rule_type=RuleType.ERROR_RATE, threshold=0)
     with pytest.raises(ValueError):

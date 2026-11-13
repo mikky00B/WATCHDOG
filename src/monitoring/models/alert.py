@@ -20,10 +20,10 @@ class Alert(Base):
     # Primary key
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # Foreign key to monitor
-    monitor_id: Mapped[int] = mapped_column(
+    # Foreign key to monitor (nullable for infrastructure/host alerts)
+    monitor_id: Mapped[int | None] = mapped_column(
         ForeignKey("monitors.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     organization_id: Mapped[int | None] = mapped_column(

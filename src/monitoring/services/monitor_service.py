@@ -12,7 +12,10 @@ from monitoring.models.client import Client
 from monitoring.models.monitor import Monitor
 from monitoring.models.organization import Organization
 from monitoring.schemas.monitor import MonitorCreate, MonitorUpdate
-from monitoring.services.checker_service import CheckerService
+from monitoring.services.checker_service import (
+    CheckerService,
+    apply_check_result_to_monitor,
+)
 from monitoring.services.incident_service import IncidentService
 
 
@@ -128,14 +131,22 @@ class MonitorService:
         enabled_only: bool = False,
         organization_id: int | None = None,
         client_id: int | None = None,
+        monitor_type: str | None = None,
+        status: str | None = None,
+        environment: str | None = None,
+        tag: str | None = None,
     ) -> tuple[list[Monitor], int]:
         """
-        List monitors with pagination and total count.
+        List monitors with pagination, filters, and total count.
 
         Args:
             skip: Number of records to skip
             limit: Maximum number of records to return
             enabled_only: Filter for enabled monitors only
+            monitor_type: Filter by monitor type (WEBSITE, API, ...)
+            status: Filter by monitor status (UP, DOWN, ...)
+            environment: Filter by environment label
+            tag: Filter for monitors that include this tag
 
         Returns:
             A tuple containing the list of monitors and the total count
@@ -148,6 +159,12 @@ class MonitorService:
             base_stmt = base_stmt.where(Monitor.organization_id == organization_id)
         if client_id is not None:
             base_stmt = base_stmt.where(Monitor.client_id == client_id)
+        if monitor_type is not None:
+            base_stmt = base_stmt.where(Monitor.monitor_type == monitor_type.upper())
+        if status is not None:
+            base_stmt = base_stmt.where(Monitor.status == status.upper())
+        if environment is not None:
+            base_stmt = base_stmt.where(Monitor.environment == environment)
 
         # Get total count
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -158,6 +175,20 @@ class MonitorService:
         stmt = base_stmt.offset(skip).limit(limit)
         result = await self.db.execute(stmt)
         monitors = list(result.scalars().all())
+
+        # Tag matching stays in Python: JSON containment is not portable across
+        # SQLite (tests) and PostgreSQL (production) without dialect-specific SQL.
+        if tag is not None:
+            wanted = tag.strip().lower()
+            monitors = [
+                monitor
+                for monitor in monitors
+                if any(
+                    str(existing).strip().lower() == wanted
+                    for existing in (monitor.tags or [])
+                )
+            ]
+            total = len(monitors)
 
         return monitors, total
 
@@ -242,14 +273,18 @@ class MonitorService:
                 checked_at=now,
             )
         else:
-            check_result = await CheckerService().check_http_endpoint(monitor)
+            check_result = await CheckerService().run_check(monitor)
             check_result.organization_id = monitor.organization_id
+            apply_check_result_to_monitor(monitor, check_result)
 
         self.db.add(check_result)
         monitor.last_checked_at = now
         monitor.next_check_at = now + timedelta(seconds=monitor.interval_seconds)
         if check_result.success:
-            monitor.status = "UP"
+            if (check_result.meta or {}).get("degraded"):
+                monitor.status = "DEGRADED"
+            else:
+                monitor.status = "UP"
             monitor.consecutive_successes += 1
             monitor.consecutive_failures = 0
             await IncidentService(self.db).resolve_for_monitor(

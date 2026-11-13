@@ -7,6 +7,22 @@ from typing import cast
 import structlog
 
 from monitoring.config import get_settings
+from monitoring.utils.redaction import redact_text
+
+
+def _redact_processor(
+    logger: object,
+    method_name: str,
+    event_dict: structlog.types.EventDict,
+) -> structlog.types.EventDict:
+    """Redact secret-looking material from log messages and string fields."""
+    event = event_dict.get("event")
+    if isinstance(event, str):
+        event_dict["event"] = redact_text(event)
+    for key, value in event_dict.items():
+        if key != "event" and isinstance(value, str):
+            event_dict[key] = redact_text(value)
+    return event_dict
 
 
 def setup_logging() -> None:
@@ -24,6 +40,7 @@ def setup_logging() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
+            _redact_processor,
             structlog.processors.JSONRenderer(),
         ],
         context_class=dict,

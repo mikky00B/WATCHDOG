@@ -93,3 +93,38 @@ def validate_url_is_safe(url: str) -> None:
         if _is_blocked_ip(resolved_ip):
             raise UnsafeURLError("Monitor URL resolves to a blocked IP address")
 
+
+def validate_host_target(target: str) -> str:
+    """Validate a DNS/TCP monitor target and return the bare hostname.
+
+    Accepts bare hostnames ("db.example.com") or scheme-qualified targets
+    ("tcp://db.example.com:5432"). Applies the same hostname and IP blocklists
+    as HTTP URLs so workers cannot probe internal networks.
+    """
+    parsed = urlparse(target)
+    hostname = parsed.hostname or target.rstrip(".")
+    if not hostname:
+        raise UnsafeURLError("Monitor target must include a hostname")
+
+    hostname = hostname.rstrip(".").lower()
+    if _is_blocked_hostname(hostname):
+        raise UnsafeURLError("Monitor target hostname is blocked")
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            resolved_ips = _iter_resolved_ips(hostname, parsed.port or 443)
+        except socket.gaierror as exc:
+            raise UnsafeURLError("Monitor target hostname could not be resolved") from exc
+        for resolved_ip in resolved_ips:
+            if _is_blocked_ip(resolved_ip):
+                raise UnsafeURLError(
+                    "Monitor target resolves to a blocked IP address",
+                ) from None
+        return hostname
+
+    if _is_blocked_ip(ip):
+        raise UnsafeURLError("Monitor target resolves to a blocked IP address")
+    return hostname
+

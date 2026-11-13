@@ -1,12 +1,24 @@
 import { apiRequest, makeQuery } from "./lib/api";
 import type {
-  AuthResponse,
   Alert,
+  ApiKey,
+  ApiKeyCreated,
+  ApiKeysResponse,
+  ApiKeyScope,
+  AuthResponse,
   CheckResult,
   Client,
   DashboardStats,
+  DashboardTemplate,
+  DashboardsResponse,
+  HostsResponse,
   Incident,
+  IncidentTimelineResponse,
   ListResponse,
+  LogStats,
+  LogsResponse,
+  MaintenanceWindow,
+  MaintenanceWindowsResponse,
   Monitor,
   MonitorStats,
   MonthlyReport,
@@ -14,8 +26,19 @@ import type {
   Organization,
   PublicStatusPage,
   RegisterResponse,
+  ResponseTimesResponse,
+  SLO,
+  SLOStatus,
+  SLOsResponse,
+  ServiceHealthResponse,
+  ServiceMapResponse,
   StatusPage,
   StatusPageService,
+  Threshold,
+  ThresholdsResponse,
+  TraceDetailResponse,
+  TracesResponse,
+  UptimeResponse,
   User,
 } from "./types";
 
@@ -73,9 +96,23 @@ export const dashboardService = {
 };
 
 export const monitorService = {
-  list(organizationId?: string) {
+  list(
+    organizationId?: string,
+    filters?: {
+      monitor_type?: string;
+      status?: string;
+      environment?: string;
+      tag?: string;
+    },
+  ) {
     return apiRequest<ListResponse<Monitor, "monitors">>(
-      `/monitors/${makeQuery({ organization_id: organizationId })}`,
+      `/monitors/${makeQuery({
+        organization_id: organizationId,
+        monitor_type: filters?.monitor_type,
+        status: filters?.status,
+        environment: filters?.environment,
+        tag: filters?.tag,
+      })}`,
     );
   },
   get(id: string) {
@@ -225,5 +262,179 @@ export const reportService = {
         month: params.month,
       })}`,
     );
+  },
+};
+
+export const maintenanceWindowService = {
+  list(organizationId: string) {
+    return apiRequest<MaintenanceWindowsResponse>(
+      `/maintenance-windows/${makeQuery({ organization_id: organizationId })}`,
+    );
+  },
+  get(id: string) {
+    return apiRequest<MaintenanceWindow>(`/maintenance-windows/${id}`);
+  },
+  create(payload: Record<string, unknown>) {
+    return apiRequest<MaintenanceWindow>("/maintenance-windows/", { method: "POST", body: payload });
+  },
+  update(id: string, payload: Record<string, unknown>) {
+    return apiRequest<MaintenanceWindow>(`/maintenance-windows/${id}`, { method: "PATCH", body: payload });
+  },
+  remove(id: string) {
+    return apiRequest<void>(`/maintenance-windows/${id}`, { method: "DELETE" });
+  },
+};
+
+export const apiKeyService = {
+  list(organizationId: string) {
+    return apiRequest<ApiKeysResponse>(`/api-keys/${makeQuery({ organization_id: organizationId })}`);
+  },
+  create(payload: {
+    organization_id: string;
+    name: string;
+    expires_at?: string | null;
+    scopes?: ApiKeyScope[];
+  }) {
+    return apiRequest<ApiKeyCreated>("/api-keys/", { method: "POST", body: payload });
+  },
+  remove(id: string) {
+    return apiRequest<ApiKey>(`/api-keys/${id}`, { method: "DELETE" });
+  },
+};
+
+export const logService = {
+  list(params: {
+    organizationId: string;
+    application?: string;
+    level?: string;
+    environment?: string;
+    search?: string;
+    traceId?: string;
+    limit?: number;
+  }) {
+    return apiRequest<LogsResponse>(
+      `/logs/${makeQuery({
+        organization_id: params.organizationId,
+        application: params.application,
+        level: params.level,
+        environment: params.environment,
+        search: params.search,
+        trace_id: params.traceId,
+        limit: params.limit,
+      })}`,
+    );
+  },
+  stats(organizationId: string, period?: string) {
+    return apiRequest<LogStats>(`/logs/stats${makeQuery({ organization_id: organizationId, period })}`);
+  },
+};
+
+export const infrastructureService = {
+  hosts(organizationId: string, historyHours?: number) {
+    return apiRequest<HostsResponse>(
+      `/infrastructure/hosts${makeQuery({ organization_id: organizationId, history_hours: historyHours })}`,
+    );
+  },
+  thresholds(organizationId: string) {
+    return apiRequest<ThresholdsResponse>(
+      `/infrastructure/thresholds${makeQuery({ organization_id: organizationId })}`,
+    );
+  },
+  createThreshold(payload: Record<string, unknown>) {
+    return apiRequest<Threshold>("/infrastructure/thresholds", { method: "POST", body: payload });
+  },
+  updateThreshold(id: string, payload: Record<string, unknown>) {
+    return apiRequest<Threshold>(`/infrastructure/thresholds/${id}`, { method: "PATCH", body: payload });
+  },
+  removeThreshold(id: string) {
+    return apiRequest<void>(`/infrastructure/thresholds/${id}`, { method: "DELETE" });
+  },
+};
+
+export const traceService = {
+  list(params: { organizationId: string; service?: string; period?: string; limit?: number }) {
+    return apiRequest<TracesResponse>(
+      `/traces/${makeQuery({
+        organization_id: params.organizationId,
+        service: params.service,
+        period: params.period,
+        limit: params.limit,
+      })}`,
+    );
+  },
+  get(traceId: string, organizationId: string) {
+    return apiRequest<TraceDetailResponse>(`/traces/${traceId}${makeQuery({ organization_id: organizationId })}`);
+  },
+  serviceMap(organizationId: string, period?: string) {
+    return apiRequest<ServiceMapResponse>(
+      `/traces/service-map${makeQuery({ organization_id: organizationId, period })}`,
+    );
+  },
+};
+
+export const sloService = {
+  list(organizationId: string) {
+    return apiRequest<SLOsResponse>(`/slos/${makeQuery({ organization_id: organizationId })}`);
+  },
+  get(id: string) {
+    return apiRequest<SLO>(`/slos/${id}`);
+  },
+  status(id: string) {
+    return apiRequest<SLOStatus>(`/slos/${id}/status`);
+  },
+  create(payload: Record<string, unknown>) {
+    return apiRequest<SLO>("/slos/", { method: "POST", body: payload });
+  },
+  update(id: string, payload: Record<string, unknown>) {
+    return apiRequest<SLO>(`/slos/${id}`, { method: "PATCH", body: payload });
+  },
+  remove(id: string) {
+    return apiRequest<void>(`/slos/${id}`, { method: "DELETE" });
+  },
+};
+
+export const dashboardTemplateService = {
+  list(organizationId: string) {
+    return apiRequest<DashboardsResponse>(`/dashboards/${makeQuery({ organization_id: organizationId })}`);
+  },
+  create(payload: Record<string, unknown>) {
+    return apiRequest<DashboardTemplate>("/dashboards/", { method: "POST", body: payload });
+  },
+  update(id: string, payload: Record<string, unknown>) {
+    return apiRequest<DashboardTemplate>(`/dashboards/${id}`, { method: "PATCH", body: payload });
+  },
+  remove(id: string) {
+    return apiRequest<void>(`/dashboards/${id}`, { method: "DELETE" });
+  },
+};
+
+export const analyticsService = {
+  responseTimes(params: { organizationId: string; period?: string; monitorId?: string; clientId?: string }) {
+    return apiRequest<ResponseTimesResponse>(
+      `/analytics/response-times${makeQuery({
+        organization_id: params.organizationId,
+        period: params.period,
+        monitor_id: params.monitorId,
+        client_id: params.clientId,
+      })}`,
+    );
+  },
+  uptime(params: { organizationId: string; period?: string }) {
+    return apiRequest<UptimeResponse>(
+      `/analytics/uptime${makeQuery({ organization_id: params.organizationId, period: params.period })}`,
+    );
+  },
+  serviceHealth(organizationId: string) {
+    return apiRequest<ServiceHealthResponse>(
+      `/analytics/service-health${makeQuery({ organization_id: organizationId })}`,
+    );
+  },
+  infrastructure(organizationId: string, historyHours?: number) {
+    return apiRequest<HostsResponse>(
+      `/analytics/infrastructure${makeQuery({ organization_id: organizationId, history_hours: historyHours })}`,
+    );
+  },
+  incidentTimeline(incidentId: string | number) {
+    return apiRequest<IncidentTimelineResponse>(`/analytics/incidents/${incidentId}/timeline`);
   },
 };

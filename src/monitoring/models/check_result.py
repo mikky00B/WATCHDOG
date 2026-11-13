@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from monitoring.models.base import Base
@@ -37,6 +37,9 @@ class CheckResult(Base):
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     error_message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # Type-specific check metadata (SSL cert info, DNS answers, degraded flag, ...)
+    # Named "meta" because "metadata" is reserved by SQLAlchemy's declarative API.
+    meta: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
 
     # Timestamp
     checked_at: Mapped[datetime] = mapped_column(
