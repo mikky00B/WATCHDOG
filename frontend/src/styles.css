@@ -1425,11 +1425,33 @@ h3 {
 }
 
 @media (max-width: 640px) {
-  .topbar,
-  .page-header,
-  .nav-actions {
+  .page-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  /* The landing topbar stays a compact row; only page headers stack. */
+  .topbar {
+    padding: 16px 18px;
+    gap: 14px;
+  }
+
+  .topbar .nav-actions {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .topbar .nav-actions .button,
+  .topbar .nav-actions a {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .topbar .brand {
+    flex-shrink: 0;
   }
 
   .workspace-header {
@@ -1726,9 +1748,10 @@ h3 {
 
 .host-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 12px;
 }
 
 .host-head h3 {
