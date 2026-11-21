@@ -179,18 +179,36 @@ class MonitorScheduler:
                     maintenance_suppressed=len(in_maintenance),
                 )
 
-                # Run checks concurrently
-                tasks = [self._check_monitor(monitor, db) for monitor in due_monitors]
+                # Capture identity before running checks: each task gets its
+                # own session so one task's rollback can never expire another
+                # task's ORM objects (shared sessions are not concurrency-safe).
+                due_metadata = [
+                    (monitor.id, monitor.name) for monitor in due_monitors
+                ]
+
+                # Run checks concurrently, one session per task
+                tasks = [
+                    self._check_monitor_by_id(monitor_id)
+                    for monitor_id, _name in due_metadata
+                ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Log any exceptions that occurred
-                for monitor, outcome in zip(due_monitors, results, strict=False):
+                for (monitor_id, monitor_name), outcome in zip(
+                    due_metadata, results, strict=False
+                ):
                     if isinstance(outcome, Exception):
                         logger.error(
                             "check_task_failed",
-                            monitor_id=monitor.id,
-                            monitor_name=monitor.name,
+                            monitor_id=monitor_id,
+                            monitor_name=monitor_name,
                             error=str(outcome),
+                            error_type=type(outcome).__name__,
+                            exc_info=(
+                                type(outcome),
+                                outcome,
+                                outcome.__traceback__,
+                            ),
                         )
 
     def _is_check_due(self, monitor: Monitor) -> bool:
@@ -268,13 +286,21 @@ class MonitorScheduler:
         if missed_count:
             await db.commit()
 
+    async def _check_monitor_by_id(self, monitor_id: int) -> None:
+        """Run one check in a dedicated session for concurrency isolation."""
+        async with AsyncSessionLocal() as task_db:
+            monitor = await task_db.get(Monitor, monitor_id)
+            if monitor is None or not monitor.enabled:
+                return
+            await self._check_monitor(monitor, task_db)
+
     async def _check_monitor(self, monitor: Monitor, db: AsyncSession) -> None:
         """
         Perform check on a single monitor.
 
         Args:
             monitor: Monitor to check
-            db: Database session
+            db: Database session dedicated to this check
         """
         try:
             logger.debug(

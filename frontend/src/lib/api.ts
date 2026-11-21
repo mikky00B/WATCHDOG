@@ -63,20 +63,86 @@ function extractErrorMessage(payload: unknown): string | null {
   return null;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const token = getToken();
-  if (options.auth !== false && token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+// Single-flight access-token refresh: concurrent 401s share one attempt.
+let refreshPromise: Promise<boolean> | null = null;
+let redirectingToLogin = false;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (!response.ok) return false;
+        const payload = (await response.json().catch(() => null)) as
+          | { access_token?: unknown; refresh_token?: unknown }
+          | null;
+        if (payload && typeof payload.access_token === "string") {
+          setToken(payload.access_token);
+          if (typeof payload.refresh_token === "string") {
+            setRefreshToken(payload.refresh_token);
+          }
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      } finally {
+        setTimeout(() => {
+          refreshPromise = null;
+        }, 0);
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
+function redirectToLogin() {
+  if (redirectingToLogin) return;
+  redirectingToLogin = true;
+  clearToken();
+  window.location.assign("/login");
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const send = async (): Promise<Response> => {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+    const token = getToken();
+    if (options.auth !== false && token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return fetch(`${API_BASE_URL}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+  };
+
+  let response = await send();
+
+  // Access token expired: refresh once and retry before giving up.
+  // Only skip refresh for the refresh endpoint itself; /auth/me must refresh.
+  if (
+    response.status === 401 &&
+    options.auth !== false &&
+    getRefreshToken() &&
+    !path.startsWith("/auth/refresh")
+  ) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await send();
+    } else {
+      redirectToLogin();
+      throw new Error("Session expired. Log in again.");
+    }
+  }
 
   if (response.status === 204) {
     return undefined as T;

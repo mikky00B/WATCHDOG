@@ -118,6 +118,8 @@ function useConfirm() {
 function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const confirmAction = useCallback((next: ConfirmOptions) => {
     setOptions(next);
@@ -132,16 +134,56 @@ function ConfirmProvider({ children }: { children: React.ReactNode }) {
     resolverRef.current = null;
   }, []);
 
+  // Escape closes; focus starts on Cancel and stays inside the dialog.
+  useEffect(() => {
+    if (!options) return;
+    cancelRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close(false);
+        return;
+      }
+      if (event.key === "Tab" && dialogRef.current) {
+        const focusables = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>("button"),
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [options, close]);
+
   return (
     <ConfirmContext.Provider value={confirmAction}>
       {children}
       {options ? (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
+            ref={dialogRef}
+          >
             <h2 id="confirm-modal-title">{options.title}</h2>
             {options.message ? <p>{options.message}</p> : null}
             <div className="modal-actions">
-              <button className="button secondary" type="button" onClick={() => close(false)}>
+              <button
+                className="button secondary"
+                type="button"
+                ref={cancelRef}
+                onClick={() => close(false)}
+              >
                 Cancel
               </button>
               <button className="button danger" type="button" onClick={() => close(true)}>
@@ -698,6 +740,47 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+function StatusBeacon({ organization }: { organization?: Organization }) {
+  const query = useQuery({
+    queryKey: ["shell-health", organization?.public_id],
+    queryFn: () => analyticsService.serviceHealth(organization!.public_id),
+    enabled: Boolean(organization),
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+  const counts = query.data?.counts;
+  let tone = "muted";
+  let label = "No workspace selected";
+  if (organization && counts) {
+    const total =
+      counts.UP + counts.DOWN + counts.DEGRADED + counts.MAINTENANCE + counts.OTHER;
+    if (counts.DOWN > 0) {
+      tone = "bad";
+      label = `${counts.DOWN} monitor${counts.DOWN === 1 ? "" : "s"} down`;
+    } else if (counts.DEGRADED > 0) {
+      tone = "warn";
+      label = `${counts.DEGRADED} degraded`;
+    } else if (counts.MAINTENANCE > 0) {
+      tone = "info";
+      label = "Maintenance in progress";
+    } else if (total > 0) {
+      tone = "ok";
+      label = "All systems operational";
+    } else {
+      tone = "muted";
+      label = "No monitors yet";
+    }
+  } else if (organization) {
+    label = "Checking status…";
+  }
+  return (
+    <div className={`beacon ${tone}`} role="status">
+      <span className="beacon-dot" aria-hidden="true" />
+      <span className="beacon-label">{label}</span>
+    </div>
+  );
+}
+
 function Shell() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -706,7 +789,32 @@ function Shell() {
   const { organizations, selected } = useOrganizations();
   const [isMobileNavOpen, setMobileNavOpen] = useState(false);
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
   const notify = useNotify();
+
+  // Dismiss the account menu on outside clicks and Escape.
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (
+        accountMenuRef.current &&
+        !accountMenuRef.current.contains(event.target as Node)
+      ) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isAccountMenuOpen]);
   const navItems = [
     { to: "/app", label: "Overview", icon: Home },
     { to: "/app/monitors", label: "Monitors", icon: MonitorCheck },
@@ -752,7 +860,7 @@ function Shell() {
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="sidebar-head">
             <Link className="brand" to="/app">
-              <LogoMark size={26} />
+              <LogoMark size={26} mono />
               WATCHDOG
             </Link>
             <button
@@ -764,25 +872,25 @@ function Shell() {
               <X size={18} />
             </button>
           </div>
+          <StatusBeacon organization={selected} />
           <nav className="side-nav">
-            {navItems.map((item) => (
+            {navItems.map((item) => {
+              const isActive =
+                item.to === "/app"
+                  ? location.pathname === item.to
+                  : location.pathname.startsWith(item.to);
+              return (
               <Link
                 key={item.to}
-                className={
-                  item.to === "/app"
-                    ? location.pathname === item.to
-                      ? "active"
-                      : undefined
-                    : location.pathname.startsWith(item.to)
-                      ? "active"
-                      : undefined
-                }
+                className={isActive ? "active" : undefined}
+                aria-current={isActive ? "page" : undefined}
                 to={item.to}
               >
                 <item.icon size={18} />
                 {item.label}
               </Link>
-            ))}
+              );
+            })}
           </nav>
         </aside>
         <div className="workspace">
@@ -825,7 +933,7 @@ function Shell() {
                   Organization
                 </Link>
               ) : null}
-              <div className="account-menu">
+              <div className="account-menu" ref={accountMenuRef}>
                 <button
                   className="account-button"
                   type="button"
@@ -3944,7 +4052,9 @@ function DataTable({ headers, rows }: { headers: string[]; rows: React.ReactNode
           <thead>
             <tr>
               {headers.map((header) => (
-                <th key={header}>{header}</th>
+                <th key={header} scope="col">
+                  {header}
+                </th>
               ))}
             </tr>
           </thead>
